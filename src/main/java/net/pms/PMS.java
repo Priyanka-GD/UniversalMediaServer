@@ -90,6 +90,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class PMS {
+	public enum ServerStatus {
+	    RUNNING,
+	    STOPPING,
+	    RESTARTING,
+	    STARTING
+	}
 	private static final String SCROLLBARS = "scrollbars";
 	private static final String NATIVELOOK_ARG = "nativelook";
 	private static final String CONSOLE_ARG = "console";
@@ -100,7 +106,7 @@ public class PMS {
 	private static final String TRACE = "trace";
 	private static final String DBLOG = "dblog";
 	private static final String DBTRACE = "dbtrace";
-
+	public static volatile ServerStatus currentStatus = ServerStatus.RUNNING;
 	public static final String NAME = "Universal Media Server";
 	public static final String CROWDIN_LINK = "https://crowdin.com/project/universalmediaserver";
 
@@ -686,7 +692,9 @@ public class PMS {
 	// see the comment above HttpMediaServer.stop()
 	public void resetMediaServer() {
 		TaskRunner.getInstance().submitNamed("restart", true, () -> {
+			currentStatus = ServerStatus.RESTARTING;
 			SseApiServlet.notify("server-restart", "Server is restarting", "Server status", "red", true);
+			currentStatus = ServerStatus.STOPPING;
 			MediaServer.stop();
 			resetRenderers(true);
 
@@ -697,10 +705,12 @@ public class PMS {
 				LOGGER.trace("Caught exception", e);
 			}
 
+			currentStatus = ServerStatus.STARTING;
 			// re-create the server because may happened the
 			// change of the used interface
 			MediaServer.start();
 			GuiManager.setReloadable(false);
+			currentStatus = ServerStatus.RUNNING;  // Assuming the start method completes synchronously
 		});
 	}
 
@@ -1119,6 +1129,12 @@ public class PMS {
 	 * Shutdown the currently running Universal Media Server.
 	 */
 	public static void shutdown() {
+		// Avoid conflicting restart and shutdown commands for the server. If the server is still restarting, wait here until it is running to shutdown.
+		do
+		{
+			
+		}
+		while ((currentStatus == ServerStatus.RESTARTING) ||(currentStatus == ServerStatus.STOPPING) || (currentStatus == ServerStatus.STARTING) );
 		try {
 			if (PlatformUtils.isWindows()) {
 				WindowsNamedPipe.setLoop(false);
