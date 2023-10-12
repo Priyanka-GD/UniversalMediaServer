@@ -98,6 +98,10 @@ const About = () => {
                 <td>{i18n.get['Website']}</td>
                 <td><Text style={{ cursor: 'pointer' }} onClick={() => { window.open(aboutDatas.website, '_blank'); }}>{aboutDatas.website}</Text></td>
               </tr>
+                   <tr>
+                      <td>{i18n.get['Documents']}</td>
+                      <td><Text style={{ cursor: 'pointer' }} onClick={() => { window.open(aboutDatas.documentsUrl, '_blank'); }}>{aboutDatas.documents}</Text></td>
+                   </tr>
               <tr>
                 <td>{i18n.get['Licence']}</td>
                 <td><Text style={{ cursor: 'pointer' }} onClick={() => { window.open(aboutDatas.licenceUrl, '_blank'); }}>{aboutDatas.licence}</Text></td>
