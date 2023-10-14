@@ -88,6 +88,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.ILoggerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import javax.swing.JOptionPane;
 
 public class PMS {
 	public enum ServerStatus {
@@ -885,12 +886,33 @@ public class PMS {
 			LOGGER.debug("", e);
 		}
 	}
+	
+	public static void checkPing() {
+	    // Command to execute ping
+	    String cmd = "ping -c 1 localhost";
+
+	    try {
+	        // Execute the command
+	        Process process = Runtime.getRuntime().exec(cmd);
+	        int exitValue = process.waitFor();
+
+	        if (exitValue == 0) {
+	            JOptionPane.showMessageDialog(null, "Ping is installed on this system.");
+	        } else {
+	            JOptionPane.showMessageDialog(null, "Ping is not installed on this system. " +
+	                    "Please install ping for the program to work correctly.");
+	        }
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        JOptionPane.showMessageDialog(null, "An error occurred while trying to execute the ping command.");
+	    }
+	}
 
 	public static void main(String[] args) {
 		boolean displayProfileChooser = false;
 		boolean denyHeadless = false;
 		File profilePath = null;
-
+        checkPing();
 		// This must be called before JNA is used
 		configureJNA();
 
