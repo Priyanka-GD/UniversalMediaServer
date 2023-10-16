@@ -133,7 +133,6 @@ export default function Settings() {
           title: i18n.get['Saved'],
           message: i18n.get['ConfigurationHasNoChanges']
         })
-      } else {
         await axios.post(settingsApiUrl, changedValues)
           .then(function() {
             setConfiguration(values);

@@ -441,11 +441,8 @@ public class LooksFrame extends JFrame implements IGui, Observer {
 			setVisible(true);
 			setExtendedState(Frame.ICONIFIED);
 		}
-		boolean updateAvailable = false;
-		if (autoUpdater != null) {
-			updateAvailable = autoUpdater.isUpdateAvailable();
-		}
-		PlatformUtils.INSTANCE.addSystemTray(this, updateAvailable);
+
+		PlatformUtils.INSTANCE.addSystemTray(this);
 	}
 
 	public static ImageIcon readImageIcon(String filename) {
@@ -684,7 +681,6 @@ public class LooksFrame extends JFrame implements IGui, Observer {
 					autoUpdater.pollServer();
 				}
 				AutoUpdateDialog.showIfNecessary(this, autoUpdater, isStartup);
-				PlatformUtils.INSTANCE.addSystemTray(this, autoUpdater.isUpdateAvailable());
 			} catch (NoClassDefFoundError ncdfe) {
 				LOGGER.error("Error displaying AutoUpdateDialog", ncdfe);
 			}

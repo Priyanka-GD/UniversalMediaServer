@@ -65,7 +65,7 @@ public interface IPlatformUtils {
 
 	public boolean isNetworkInterfaceLoopback(NetworkInterface ni) throws SocketException;
 
-	public void addSystemTray(final LooksFrame frame, boolean updateAvailable);
+	public void addSystemTray(final LooksFrame frame);
 
 	/**
 	 * Fetch the hardware address for a network interface.

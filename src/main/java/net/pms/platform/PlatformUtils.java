@@ -179,11 +179,11 @@ public class PlatformUtils implements IPlatformUtils {
 	}
 
 	@Override
-	public void addSystemTray(final LooksFrame frame, boolean updateAvailable) {
+	public void addSystemTray(final LooksFrame frame) {
 		if (SystemTray.isSupported()) {
 			SystemTray tray = SystemTray.getSystemTray();
 
-			Image trayIconImage = resolveTrayIcon(updateAvailable);
+			Image trayIconImage = resolveTrayIcon();
 
 			PopupMenu popup = new PopupMenu();
 			MenuItem defaultItem = new MenuItem(Messages.getString("Quit"));
@@ -212,9 +212,6 @@ public class PlatformUtils implements IPlatformUtils {
 				browseURI(PMS.get().getGuiServer().getUrl());
 			});
 			try {
-				if (tray.getTrayIcons().length > 0) {
-					tray.remove(tray.getTrayIcons()[0]);
-				}
 				tray.add(trayIcon);
 			} catch (AWTException e) {
 				LOGGER.debug("Caught exception", e);
@@ -275,17 +272,13 @@ public class PlatformUtils implements IPlatformUtils {
 		return "icon-24.png";
 	}
 
-	protected String getTrayIconUpdate() {
-		return "icon-updatable-2.png";
-	}
-
 	/**
 	 * Return the proper tray icon for the operating system.
 	 *
 	 * @return The tray icon.
 	 */
-	protected Image resolveTrayIcon(boolean updateAvailable) {
-		String icon = updateAvailable ? getTrayIconUpdate() : getTrayIcon();
+	protected Image resolveTrayIcon() {
+		String icon = getTrayIcon();
 		return Toolkit.getDefaultToolkit().getImage(this.getClass().getResource("/resources/images/" + icon));
 	}
 
