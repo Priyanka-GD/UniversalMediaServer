@@ -50,7 +50,7 @@ function UserMenu() {
             icon={<PlayerPlay size={14} />}
             onClick={() => { window.location.href = '/player'; }}
           >
-            {i18n.getI18nString('Player')}
+            {i18n.getI18nString('WebPlayer')}
           </Menu.Item>
         )}
         {!session.player && <>
