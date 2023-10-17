@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Added link to support website on the about page
 
 ### General
 - Faster playback start and seeking via tsMuxeR
