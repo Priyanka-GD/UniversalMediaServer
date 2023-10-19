@@ -16,6 +16,7 @@
  */
 package net.pms.platform;
 
+import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.NetworkInterface;
@@ -65,7 +66,7 @@ public interface IPlatformUtils {
 
 	public boolean isNetworkInterfaceLoopback(NetworkInterface ni) throws SocketException;
 
-	public void addSystemTray(final LooksFrame frame);
+	public void addSystemTray(final LooksFrame frame, boolean isUpdateable);
 
 	/**
 	 * Fetch the hardware address for a network interface.
@@ -178,4 +179,6 @@ public interface IPlatformUtils {
 	public abstract String getJvmExecutableName();
 
 	public abstract void destroyProcess(final Process p);
+
+    void updateTrayIcon(LooksFrame looksFrame, TrayIcon trayIcon);
 }

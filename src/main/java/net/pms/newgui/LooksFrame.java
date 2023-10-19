@@ -38,6 +38,7 @@ import javax.swing.plaf.metal.DefaultMetalTheme;
 import javax.swing.plaf.metal.MetalLookAndFeel;
 import net.pms.Messages;
 import net.pms.PMS;
+import net.pms.configuration.Build;
 import net.pms.configuration.UmsConfiguration;
 import net.pms.gui.EConnectionState;
 import net.pms.gui.IGui;
@@ -442,7 +443,9 @@ public class LooksFrame extends JFrame implements IGui, Observer {
 			setExtendedState(Frame.ICONIFIED);
 		}
 
-		PlatformUtils.INSTANCE.addSystemTray(this);
+		// Add if we should update the tray icon
+		PlatformUtils.INSTANCE.addSystemTray(this, Build.isUpdatable());
+
 	}
 
 	public static ImageIcon readImageIcon(String filename) {

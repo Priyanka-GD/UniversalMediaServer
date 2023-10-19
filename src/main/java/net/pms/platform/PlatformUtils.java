@@ -179,12 +179,13 @@ public class PlatformUtils implements IPlatformUtils {
 	}
 
 	@Override
-	public void addSystemTray(final LooksFrame frame) {
+	public void addSystemTray(final LooksFrame frame, boolean isUpdateable) {
 		if (SystemTray.isSupported()) {
 			SystemTray tray = SystemTray.getSystemTray();
 
 			Image trayIconImage = resolveTrayIcon();
 
+			//Moved orgininal code to new function
 			PopupMenu popup = new PopupMenu();
 			MenuItem defaultItem = new MenuItem(Messages.getString("Quit"));
 			MenuItem traceItem = new MenuItem(Messages.getString("SettingsOld"));
@@ -213,6 +214,75 @@ public class PlatformUtils implements IPlatformUtils {
 			});
 			try {
 				tray.add(trayIcon);
+			} catch (AWTException e) {
+				LOGGER.debug("Caught exception", e);
+			}
+			try {
+				if (isUpdateable) {
+					updateTrayIcon(frame, trayIcon);
+				}
+			} catch (Exception e) {
+				LOGGER.debug("Caught exception", e);
+			}
+		}
+	}
+
+	// Tray icon test changes
+	public TrayIcon makeIcon(Image iconImage, final LooksFrame frame){
+		PopupMenu popup = new PopupMenu();
+		MenuItem defaultItem = new MenuItem(Messages.getString("Quit"));
+		MenuItem traceItem = new MenuItem(Messages.getString("SettingsOld"));
+
+		defaultItem.addActionListener((ActionEvent e) -> PMS.quit());
+
+		traceItem.addActionListener((ActionEvent e) -> frame.setVisible(true));
+
+		if (PMS.getConfiguration().useWebPlayerServer()) {
+			MenuItem webPlayerItem = new MenuItem(Messages.getString("WebPlayer"));
+			webPlayerItem.addActionListener((ActionEvent e) -> browseURI(PMS.get().getWebPlayerServer().getUrl()));
+			popup.add(webPlayerItem);
+		}
+
+		MenuItem webGuiItem = new MenuItem(Messages.getString("Settings"));
+		webGuiItem.addActionListener((ActionEvent e) -> browseURI(PMS.get().getGuiServer().getUrl()));
+		popup.add(webGuiItem);
+		popup.add(traceItem);
+		popup.add(defaultItem);
+
+		TrayIcon trayIcon = new TrayIcon(iconImage, PropertiesUtil.getProjectProperties().get("project.name"), popup);
+		return trayIcon;
+	}
+
+	// Make a new updated tray icon, and replace old one
+	protected Image resolveUpdateTrayIcon() {
+		String icon = getUpdateTrayIcon();
+		return Toolkit.getDefaultToolkit().getImage(this.getClass().getResource("/resources/images/" + icon));
+	}
+
+	protected String getUpdateTrayIcon() {
+		// different icon as placeholder
+		return "icon-status-warning.png";
+	}
+
+	@Override
+	public void updateTrayIcon(final LooksFrame frame, TrayIcon trayIcon) {
+		if (SystemTray.isSupported()) {
+			SystemTray tray = SystemTray.getSystemTray();
+
+			Image newTrayIconImage = resolveUpdateTrayIcon();
+			// get new tray icon
+			final TrayIcon newtrayIcon = makeIcon(newTrayIconImage, frame);
+
+			TrayIcon oldtrayIcon = trayIcon;
+			newtrayIcon.setImageAutoSize(true);
+
+			newtrayIcon.addActionListener((ActionEvent e) -> {
+				browseURI(PMS.get().getGuiServer().getUrl());
+			});
+
+			try {
+				tray.remove(oldtrayIcon);
+				tray.add(newtrayIcon);
 			} catch (AWTException e) {
 				LOGGER.debug("Caught exception", e);
 			}
