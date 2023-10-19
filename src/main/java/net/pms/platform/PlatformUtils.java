@@ -185,28 +185,8 @@ public class PlatformUtils implements IPlatformUtils {
 
 			Image trayIconImage = resolveTrayIcon();
 
-			//Moved orgininal code to new function
-			PopupMenu popup = new PopupMenu();
-			MenuItem defaultItem = new MenuItem(Messages.getString("Quit"));
-			MenuItem traceItem = new MenuItem(Messages.getString("SettingsOld"));
-
-			defaultItem.addActionListener((ActionEvent e) -> PMS.quit());
-
-			traceItem.addActionListener((ActionEvent e) -> frame.setVisible(true));
-
-			if (PMS.getConfiguration().useWebPlayerServer()) {
-				MenuItem webPlayerItem = new MenuItem(Messages.getString("WebPlayer"));
-				webPlayerItem.addActionListener((ActionEvent e) -> browseURI(PMS.get().getWebPlayerServer().getUrl()));
-				popup.add(webPlayerItem);
-			}
-
-			MenuItem webGuiItem = new MenuItem(Messages.getString("Settings"));
-			webGuiItem.addActionListener((ActionEvent e) -> browseURI(PMS.get().getGuiServer().getUrl()));
-			popup.add(webGuiItem);
-			popup.add(traceItem);
-			popup.add(defaultItem);
-
-			final TrayIcon trayIcon = new TrayIcon(trayIconImage, PropertiesUtil.getProjectProperties().get("project.name"), popup);
+			//Moved original code to new function
+			final TrayIcon trayIcon = makeIcon(trayIconImage, frame);
 
 			trayIcon.setImageAutoSize(true);
 			trayIcon.addActionListener((ActionEvent e) -> {
@@ -272,8 +252,6 @@ public class PlatformUtils implements IPlatformUtils {
 			Image newTrayIconImage = resolveUpdateTrayIcon();
 			// get new tray icon
 			final TrayIcon newtrayIcon = makeIcon(newTrayIconImage, frame);
-
-			TrayIcon oldtrayIcon = trayIcon;
 			newtrayIcon.setImageAutoSize(true);
 
 			newtrayIcon.addActionListener((ActionEvent e) -> {
@@ -281,7 +259,7 @@ public class PlatformUtils implements IPlatformUtils {
 			});
 
 			try {
-				tray.remove(oldtrayIcon);
+				tray.remove(trayIcon);
 				tray.add(newtrayIcon);
 			} catch (AWTException e) {
 				LOGGER.debug("Caught exception", e);

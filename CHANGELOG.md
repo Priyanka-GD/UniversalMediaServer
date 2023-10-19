@@ -1,7 +1,8 @@
 # Changelog
 
 ## Unreleased
-
+-Set the tray icon to remove and add new icon if application is updatable
+-Moved tray icon creation code to new function
 ### General
 - Faster playback start and seeking via tsMuxeR
 

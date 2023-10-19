@@ -180,5 +180,5 @@ public interface IPlatformUtils {
 
 	public abstract void destroyProcess(final Process p);
 
-    void updateTrayIcon(LooksFrame looksFrame, TrayIcon trayIcon);
+    public abstract void updateTrayIcon(LooksFrame looksFrame, TrayIcon trayIcon);
 }
