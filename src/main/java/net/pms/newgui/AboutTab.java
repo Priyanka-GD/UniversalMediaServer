@@ -61,8 +61,8 @@ public class AboutTab {
 
 	public JComponent build() {
 		FormLayout layout = new FormLayout(
-			"0:grow, pref, 0:grow",
-			"pref, 3dlu, pref, 12dlu, pref, 12dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, p, 3dlu, p, 3dlu, p, 3dlu, p, 3dlu, p"
+				"0:grow, pref, 0:grow",
+			    "pref, 3dlu, pref, 12dlu, pref, 12dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, pref, 3dlu, p, 3dlu, p, 3dlu, p, 3dlu, p, 3dlu, p, 3dlu, p"
 		);
 
 		PanelBuilder builder = new PanelBuilder(layout);
@@ -139,10 +139,15 @@ public class AboutTab {
 		lSVPLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		lSVPLink.addMouseListener(svpLink);
 
-		final LinkMouseListener openSubtitlesLink = new LinkMouseListener("OpenSubtitles.org", "https://www.opensubtitles.org/");
+		final LinkMouseListener openSubtitlesLink = new LinkMouseListener("OpenSubtitles.org", "https://support.universalmediaserver.com/");
 		JLabel lOpenSubtitlesLink = builder.addLabel(openSubtitlesLink.getLabel(), cc.xy(2, getAndIncrementRowPosition(), "center, fill"));
 		lOpenSubtitlesLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		lOpenSubtitlesLink.addMouseListener(openSubtitlesLink);
+		
+		final LinkMouseListener umcSupportLink = new LinkMouseListener("UMS Support", "https://support.universalmediaserver.com/");
+		JLabel lumcSupportLink = builder.addLabel(umcSupportLink.getLabel(), cc.xy(2, getAndIncrementRowPosition(), "center, fill"));
+		lumcSupportLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		lumcSupportLink.addMouseListener(umcSupportLink);
 
 		JScrollPane scrollPane = new JScrollPane(builder.getPanel());
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());

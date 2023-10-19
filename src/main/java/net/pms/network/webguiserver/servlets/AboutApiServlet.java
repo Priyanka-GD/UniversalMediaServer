@@ -72,6 +72,8 @@ public class AboutApiServlet extends GuiHttpServlet {
 				jsonlinks.add(toJsonObject("SVP", "https://www.svp-team.com/"));
 				jsonlinks.add(toJsonObject("OpenSubtitles.org", "https://www.opensubtitles.org/"));
 				jsonlinks.add(toJsonObject("The Movie Database (TMDB)", "https://www.themoviedb.org"));
+				jsonlinks.add(toJsonObject("UMS Support", "https://support.universalmediaserver.com/"));
+				jsonlinks.add(toJsonObject("UMS Forums", "https://www.universalmediaserver.com/forum/"));
 				jsonResponse.add("links", jsonlinks);
 				Account account = AuthService.getAccountLoggedIn(req);
 				if (account != null && (account.havePermission(Permissions.SETTINGS_VIEW | Permissions.SETTINGS_MODIFY))) {
