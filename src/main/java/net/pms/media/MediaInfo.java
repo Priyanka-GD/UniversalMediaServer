@@ -47,6 +47,7 @@ import net.pms.image.ImagesUtil.ScaleType;
 import net.pms.io.OutputParams;
 import net.pms.io.ProcessWrapperImpl;
 import net.pms.media.audio.MediaAudio;
+import net.pms.media.AudioVariantInfo;
 import net.pms.media.chapter.MediaChapter;
 import net.pms.media.metadata.MediaVideoMetadata;
 import net.pms.media.subtitle.MediaSubtitle;
@@ -667,15 +668,7 @@ public class MediaInfo implements Cloneable {
 								thumbready = true;
 							}
 
-							audio.setAlbum(extractAudioTagKeyValue(t, FieldKey.ALBUM));
-							audio.setArtist(extractAudioTagKeyValue(t, FieldKey.ARTIST));
-							audio.setComposer(extractAudioTagKeyValue(t, FieldKey.COMPOSER));
-							audio.setConductor(extractAudioTagKeyValue(t, FieldKey.CONDUCTOR));
-							audio.setSongname(extractAudioTagKeyValue(t, FieldKey.TITLE));
-							audio.setMbidRecord(extractAudioTagKeyValue(t, FieldKey.MUSICBRAINZ_RELEASEID));
-							audio.setMbidTrack(extractAudioTagKeyValue(t, FieldKey.MUSICBRAINZ_TRACK_ID));
-							audio.setRating(StarRating.convertTagRatingToStar(t));
-							audio.setGenre(extractAudioTagKeyValue(t, FieldKey.GENRE));
+							audio = setAudioParams(audio, t);
 
 							String keyyear = extractAudioTagKeyValue(t, FieldKey.YEAR);
 							if (keyyear != null) {
@@ -838,6 +831,19 @@ public class MediaInfo implements Cloneable {
 		}
 	}
 
+	private MediaAudio setAudioParams(MediaAudio audio, Tag t){
+		audio.setAlbum(extractAudioTagKeyValue(t, FieldKey.ALBUM));
+		audio.setArtist(extractAudioTagKeyValue(t, FieldKey.ARTIST));
+		audio.setComposer(extractAudioTagKeyValue(t, FieldKey.COMPOSER));
+		audio.setConductor(extractAudioTagKeyValue(t, FieldKey.CONDUCTOR));
+		audio.setSongname(extractAudioTagKeyValue(t, FieldKey.TITLE));
+		audio.setMbidRecord(extractAudioTagKeyValue(t, FieldKey.MUSICBRAINZ_RELEASEID));
+		audio.setMbidTrack(extractAudioTagKeyValue(t, FieldKey.MUSICBRAINZ_TRACK_ID));
+		audio.setRating(StarRating.convertTagRatingToStar(t));
+		audio.setGenre(extractAudioTagKeyValue(t, FieldKey.GENRE));
+		return audio;
+	}
+
 	/**
 	 * Parse media for ThumbOnly.
 	 */
@@ -954,32 +960,7 @@ public class MediaInfo implements Cloneable {
 							frameName = frameName.replace(',', '_');
 							File jpg = new File(frameName);
 
-							if (jpg.exists()) {
-								try (InputStream is = new FileInputStream(jpg)) {
-									int sz = is.available();
-									if (sz > 0) {
-										byte[] bytes = new byte[sz];
-										is.read(bytes);
-										setThumb(DLNAThumbnail.toThumbnail(
-											bytes,
-											640,
-											480,
-											ScaleType.MAX,
-											ImageFormat.SOURCE,
-											false
-										));
-									}
-								}
-
-								if (!jpg.delete()) {
-									jpg.deleteOnExit();
-								}
-
-								// Try and retry
-								if (!jpg.getParentFile().delete() && !jpg.getParentFile().delete()) {
-									LOGGER.debug("Failed to delete \"" + jpg.getParentFile().getAbsolutePath() + "\"");
-								}
-							}
+							handleJpg(jpg);
 						} catch (IOException e) {
 							LOGGER.debug("Caught exception", e);
 						}
@@ -1000,6 +981,39 @@ public class MediaInfo implements Cloneable {
 					}
 				}
 			}
+		}
+	}
+
+	private void handleJpg(File jpg) {
+		try {
+			if (jpg.exists()) {
+				try (InputStream is = new FileInputStream(jpg)) {
+					int sz = is.available();
+					if (sz > 0) {
+						byte[] bytes = new byte[sz];
+						is.read(bytes);
+						setThumb(DLNAThumbnail.toThumbnail(
+								bytes,
+								640,
+								480,
+								ScaleType.MAX,
+								ImageFormat.SOURCE,
+								false
+						));
+					}
+				}
+
+				if (!jpg.delete()) {
+					jpg.deleteOnExit();
+				}
+
+				// Try and retry
+				if (!jpg.getParentFile().delete() && !jpg.getParentFile().delete()) {
+					LOGGER.debug("Failed to delete \"" + jpg.getParentFile().getAbsolutePath() + "\"");
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.debug("Caught exception", e);
 		}
 	}
 
@@ -1047,36 +1061,7 @@ public class MediaInfo implements Cloneable {
 					}
 				} else if (matches) {
 					if (line.contains("Duration")) {
-						StringTokenizer st = new StringTokenizer(line, ",");
-						while (st.hasMoreTokens()) {
-							String token = st.nextToken().trim();
-							if (token.startsWith("Duration: ")) {
-								String durationStr = token.substring(10);
-								int l = durationStr.substring(durationStr.indexOf('.') + 1).length();
-								if (l < 4) {
-									durationStr += "00".substring(0, 3 - l);
-								}
-								if (durationStr.contains("N/A")) {
-									durationSec = null;
-								} else {
-									durationSec = parseDurationString(durationStr);
-								}
-							} else if (token.startsWith("bitrate: ")) {
-								String bitr = token.substring(9);
-								int spacepos = bitr.indexOf(' ');
-								if (spacepos > -1) {
-									String value = bitr.substring(0, spacepos);
-									String unit = bitr.substring(spacepos + 1);
-									bitrate = Integer.parseInt(value);
-									if (unit.equals("kb/s")) {
-										bitrate = 1024 * bitrate;
-									}
-									if (unit.equals("mb/s")) {
-										bitrate = 1048576 * bitrate;
-									}
-								}
-							}
-						}
+						parseDuration(line);
 					} else if (line.contains("Audio:")) {
 						StringTokenizer st = new StringTokenizer(line, ",");
 						int a = line.indexOf('(');
@@ -1103,57 +1088,7 @@ public class MediaInfo implements Cloneable {
 
 						while (st.hasMoreTokens()) {
 							String token = st.nextToken().trim();
-							if (token.startsWith("Stream")) {
-								String audioString = "Audio: ";
-								int positionAfterAudioString = token.indexOf(audioString) + audioString.length();
-								String codec;
-
-								/**
-								 * Check whether there are more details after the audio string.
-								 * e.g. "Audio: aac (LC)"
-								 */
-								if (token.indexOf(" ", positionAfterAudioString) != -1) {
-									codec = token.substring(positionAfterAudioString, token.indexOf(" ", positionAfterAudioString)).trim();
-
-									// workaround for AAC audio formats
-									if (codec.equals("aac")) {
-										if (token.contains("(LC)")) {
-											codec = FormatConfiguration.AAC_LC;
-										} else if (token.contains("(HE-AAC)")) {
-											codec = FormatConfiguration.HE_AAC;
-										}
-									}
-								} else {
-									codec = token.substring(positionAfterAudioString);
-
-									// workaround for AAC audio formats
-									if (codec.equals("aac")) {
-										codec = FormatConfiguration.AAC_LC;
-									}
-								}
-
-								audio.setCodecA(codec);
-							} else if (token.endsWith("Hz")) {
-								audio.setSampleFrequency(token.substring(0, token.indexOf("Hz")).trim());
-							} else if (token.equals("mono")) {
-								audio.getAudioProperties().setNumberOfChannels(1);
-							} else if (token.equals("stereo")) {
-								audio.getAudioProperties().setNumberOfChannels(2);
-							} else if (token.equals("5:1") || token.equals("5.1") || token.equals("6 channels")) {
-								audio.getAudioProperties().setNumberOfChannels(6);
-							} else if (token.equals("5 channels")) {
-								audio.getAudioProperties().setNumberOfChannels(5);
-							} else if (token.equals("4 channels")) {
-								audio.getAudioProperties().setNumberOfChannels(4);
-							} else if (token.equals("2 channels")) {
-								audio.getAudioProperties().setNumberOfChannels(2);
-							} else if (token.equals("s32")) {
-								audio.setBitsperSample(32);
-							} else if (token.equals("s24")) {
-								audio.setBitsperSample(24);
-							} else if (token.equals("s16")) {
-								audio.setBitsperSample(16);
-							}
+							audio = parseToken(token, audio);
 						}
 						int fFmpegMetaDataNr = fFmpegMetaData.nextIndex();
 
@@ -1181,215 +1116,326 @@ public class MediaInfo implements Cloneable {
 
 						audioTracks.add(audio);
 					} else if (line.contains("Video:")) {
-						StringTokenizer st = new StringTokenizer(line, ",");
-						while (st.hasMoreTokens()) {
-							String token = st.nextToken().trim();
-							if (token.startsWith("Stream")) {
-								String videoString = "Video: ";
-								int positionAfterVideoString = token.indexOf(videoString) + videoString.length();
-								String codec;
-
-								// Check whether there are more details after the video string
-								if (token.indexOf(" ", positionAfterVideoString) != -1) {
-									codec = token.substring(positionAfterVideoString, token.indexOf(" ", positionAfterVideoString)).trim();
-								} else {
-									codec = token.substring(positionAfterVideoString);
-								}
-
-								codecV = codec;
-								videoTrackCount++;
-							} else if ((token.contains("tbc") || token.contains("tb(c)"))) {
-								// A/V sync issues with newest FFmpeg, due to the new tbr/tbn/tbc outputs
-								// Priority to tb(c)
-								String frameRateDoubleString = token.substring(0, token.indexOf("tb")).trim();
-								try {
-									// tbc taken into account only if different than tbr
-									if (!frameRateDoubleString.equals(frameRate)) {
-										Double frameRateDouble = Double.valueOf(frameRateDoubleString);
-										frameRate = String.format(Locale.ENGLISH, "%.2f", frameRateDouble / 2);
-									}
-								} catch (NumberFormatException nfe) {
-									// Could happen if tbc is "1k" or something like that, no big deal
-									LOGGER.debug("Could not parse frame rate \"" + frameRateDoubleString + "\"");
-								}
-
-							} else if ((token.contains("tbr") || token.contains("tb(r)")) && frameRate == null) {
-								frameRate = token.substring(0, token.indexOf("tb")).trim();
-							} else if ((token.contains("fps") || token.contains("fps(r)")) && frameRate == null) { // dvr-ms ?
-								frameRate = token.substring(0, token.indexOf("fps")).trim();
-							} else if (token.indexOf('x') > -1 && !token.contains("max")) {
-								String resolution = token.trim();
-								if (resolution.contains(" [")) {
-									resolution = resolution.substring(0, resolution.indexOf(" ["));
-								}
-								try {
-									width = Integer.parseInt(resolution.substring(0, resolution.indexOf('x')));
-								} catch (NumberFormatException nfe) {
-									LOGGER.debug("Could not parse width from \"" + resolution.substring(0, resolution.indexOf('x')) + "\"");
-								}
-								try {
-									height = Integer.parseInt(resolution.substring(resolution.indexOf('x') + 1));
-								} catch (NumberFormatException nfe) {
-									LOGGER.debug("Could not parse height from \"" + resolution.substring(resolution.indexOf('x') + 1) + "\"");
-								}
-							}
-						}
+						getVid(line);
 					} else if (line.contains("Subtitle:")) {
 						MediaSubtitle subtitle = new MediaSubtitle();
-						// $ ffmpeg -codecs | grep "^...S"
-						// ..S... = Subtitle codec
-						// DES... ass                  ASS (Advanced SSA) subtitle
-						// DES... dvb_subtitle         DVB subtitles (decoders: dvbsub ) (encoders: dvbsub )
-						// ..S... dvb_teletext         DVB teletext
-						// DES... dvd_subtitle         DVD subtitles (decoders: dvdsub ) (encoders: dvdsub )
-						// ..S... eia_608              EIA-608 closed captions
-						// D.S... hdmv_pgs_subtitle    HDMV Presentation Graphic Stream subtitles (decoders: pgssub )
-						// D.S... jacosub              JACOsub subtitle
-						// D.S... microdvd             MicroDVD subtitle
-						// DES... mov_text             MOV text
-						// D.S... mpl2                 MPL2 subtitle
-						// D.S... pjs                  PJS (Phoenix Japanimation Society) subtitle
-						// D.S... realtext             RealText subtitle
-						// D.S... sami                 SAMI subtitle
-						// DES... srt                  SubRip subtitle with embedded timing
-						// DES... ssa                  SSA (SubStation Alpha) subtitle
-						// DES... subrip               SubRip subtitle
-						// D.S... subviewer            SubViewer subtitle
-						// D.S... subviewer1           SubViewer v1 subtitle
-						// D.S... text                 raw UTF-8 text
-						// D.S... vplayer              VPlayer subtitle
-						// D.S... webvtt               WebVTT subtitle
-						// DES... xsub                 XSUB
-						if (line.contains("srt") || line.contains("subrip")) {
-							subtitle.setType(SubtitleType.SUBRIP);
-						} else if (line.contains(" text")) {
-							// excludes dvb_teletext, mov_text, realtext
-							subtitle.setType(SubtitleType.TEXT);
-						} else if (line.contains("microdvd")) {
-							subtitle.setType(SubtitleType.MICRODVD);
-						} else if (line.contains("sami")) {
-							subtitle.setType(SubtitleType.SAMI);
-						} else if (line.contains("ass") || line.contains("ssa")) {
-							subtitle.setType(SubtitleType.ASS);
-						} else if (line.contains("dvd_subtitle")) {
-							subtitle.setType(SubtitleType.VOBSUB);
-						} else if (line.contains("xsub")) {
-							subtitle.setType(SubtitleType.DIVX);
-						} else if (line.contains("mov_text")) {
-							subtitle.setType(SubtitleType.TX3G);
-						} else if (line.contains("webvtt")) {
-							subtitle.setType(SubtitleType.WEBVTT);
-						} else if (line.contains("eia_608")) {
-							subtitle.setType(SubtitleType.EIA608);
-						} else if (line.contains("dvb_subtitle")) {
-							subtitle.setType(SubtitleType.DVBSUB);
-						} else {
-							subtitle.setType(SubtitleType.UNKNOWN);
-						}
-						int a = line.indexOf('(');
-						int b = line.indexOf("):", a);
-						if (a > -1 && b > a) {
-							subtitle.setLang(line.substring(a + 1, b));
-						} else {
-							subtitle.setLang(MediaLang.UND);
-						}
-						subtitle.setId(subId++);
-						subtitle.setDefault(line.contains("(default)"));
-						subtitle.setForced(line.contains("(forced)"));
-						int fFmpegMetaDataNr = fFmpegMetaData.nextIndex();
-						if (fFmpegMetaDataNr > -1) {
-							line = lines.get(fFmpegMetaDataNr);
-						}
-						if (line.contains("Metadata:")) {
-							fFmpegMetaDataNr += 1;
-							line = lines.get(fFmpegMetaDataNr);
-							while (line.indexOf("      ") == 0) {
-								if (line.toLowerCase().contains("title           :")) {
-									int aa = line.indexOf(": ");
-									int bb = line.length();
-									if (aa > -1 && bb > aa) {
-										subtitle.setSubtitlesTrackTitleFromMetadata(line.substring(aa + 2, bb));
-										break;
-									}
-								} else {
-									fFmpegMetaDataNr += 1;
-									line = lines.get(fFmpegMetaDataNr);
-								}
-							}
-						}
+						subtitle = setSubtitle(line, lines, subId, fFmpegMetaData);
 						subtitleTracks.add(subtitle);
 					} else if (line.contains("Chapters:")) {
-						int fFmpegMetaDataNr = fFmpegMetaData.nextIndex();
-						if (fFmpegMetaDataNr > -1) {
-							line = lines.get(fFmpegMetaDataNr);
-						}
-						List<MediaChapter> ffmpegChapters = new ArrayList<>();
-						while (line.contains("Chapter #")) {
-							MediaChapter chapter = new MediaChapter();
-							//set chapter id
-							String idStr = line.substring(line.indexOf("Chapter #") + 9);
-							if (idStr.contains(" ")) {
-								idStr = idStr.substring(0, idStr.indexOf(" "));
-							}
-							String[] ids = idStr.split(":");
-							if (ids.length > 1) {
-								chapter.setId(Integer.parseInt(ids[1]));
-							} else {
-								chapter.setId(Integer.parseInt(ids[0]));
-							}
-							//set chapter start
-							if (line.contains("start ")) {
-								String startStr = line.substring(line.indexOf("start ") + 6);
-								if (startStr.contains(" ")) {
-									startStr = startStr.substring(0, startStr.indexOf(" "));
-								}
-								if (startStr.endsWith(",")) {
-									startStr = startStr.substring(0, startStr.length() - 1);
-								}
-								chapter.setStart(Double.parseDouble(startStr));
-							}
-							//set chapter end
-							if (line.contains(" end ")) {
-								String endStr = line.substring(line.indexOf(" end ") + 5);
-								if (endStr.contains(" ")) {
-									endStr = endStr.substring(0, endStr.indexOf(" "));
-								}
-								chapter.setEnd(Double.parseDouble(endStr));
-							}
-							chapter.setLang(MediaLang.UND);
-							fFmpegMetaDataNr += 1;
-							line = lines.get(fFmpegMetaDataNr);
-							if (line.contains("Metadata:")) {
-								fFmpegMetaDataNr += 1;
-								line = lines.get(fFmpegMetaDataNr);
-								while (line.indexOf("      ") == 0) {
-									if (line.contains(": ")) {
-										int aa = line.indexOf(": ");
-										String key = line.substring(0, aa).trim();
-										String value = line.substring(aa + 2);
-										if ("title".equals(key)) {
-											//do not set title if it is default, it will be filled automatically later
-											if (!MediaChapter.isTitleDefault(value)) {
-												chapter.setTitle(value);
-											}
-										} else {
-											LOGGER.debug("New chapter metadata not handled \"" + key + "\" : \"" + value + "\"");
-										}
-										break;
-									} else {
-										fFmpegMetaDataNr += 1;
-										line = lines.get(fFmpegMetaDataNr);
-									}
-								}
-							}
-							ffmpegChapters.add(chapter);
-						}
-						setChapters(ffmpegChapters);
+						List<MediaChapter> newChapters = getNewChapters(line, lines, fFmpegMetaData);
+						setChapters(newChapters);
 					}
 				}
 			}
 		}
 		ffmpegparsed = true;
+	}
+
+	private void parseDuration(String line){
+		StringTokenizer st = new StringTokenizer(line, ",");
+		while (st.hasMoreTokens()) {
+			String token = st.nextToken().trim();
+			if (token.startsWith("Duration: ")) {
+				String durationStr = token.substring(10);
+				int l = durationStr.substring(durationStr.indexOf('.') + 1).length();
+				if (l < 4) {
+					durationStr += "00".substring(0, 3 - l);
+				}
+				if (durationStr.contains("N/A")) {
+					durationSec = null;
+				} else {
+					durationSec = parseDurationString(durationStr);
+				}
+			} else if (token.startsWith("bitrate: ")) {
+				String bitr = token.substring(9);
+				int spacepos = bitr.indexOf(' ');
+				if (spacepos > -1) {
+					String value = bitr.substring(0, spacepos);
+					String unit = bitr.substring(spacepos + 1);
+					bitrate = Integer.parseInt(value);
+					if (unit.equals("kb/s")) {
+						bitrate = 1024 * bitrate;
+					}
+					if (unit.equals("mb/s")) {
+						bitrate = 1048576 * bitrate;
+					}
+				}
+			}
+		}
+	}
+
+	private MediaAudio parseToken(String token, MediaAudio audio){
+		if (token.startsWith("Stream")) {
+			String codec = getString(token);
+
+			audio.setCodecA(codec);
+		} else if (token.endsWith("Hz")) {
+			audio.setSampleFrequency(token.substring(0, token.indexOf("Hz")).trim());
+		} else if (token.equals("mono")) {
+			audio.getAudioProperties().setNumberOfChannels(1);
+		} else if (token.equals("stereo")) {
+			audio.getAudioProperties().setNumberOfChannels(2);
+		} else if (token.equals("5:1") || token.equals("5.1") || token.equals("6 channels")) {
+			audio.getAudioProperties().setNumberOfChannels(6);
+		} else if (token.equals("5 channels")) {
+			audio.getAudioProperties().setNumberOfChannels(5);
+		} else if (token.equals("4 channels")) {
+			audio.getAudioProperties().setNumberOfChannels(4);
+		} else if (token.equals("2 channels")) {
+			audio.getAudioProperties().setNumberOfChannels(2);
+		} else if (token.equals("s32")) {
+			audio.setBitsperSample(32);
+		} else if (token.equals("s24")) {
+			audio.setBitsperSample(24);
+		} else if (token.equals("s16")) {
+			audio.setBitsperSample(16);
+		}
+		return audio;
+	}
+
+	private static String getString(String token) {
+		String audioString = "Audio: ";
+		int positionAfterAudioString = token.indexOf(audioString) + audioString.length();
+		String codec;
+
+		/**
+		 * Check whether there are more details after the audio string.
+		 * e.g. "Audio: aac (LC)"
+		 */
+		if (token.indexOf(" ", positionAfterAudioString) != -1) {
+			codec = token.substring(positionAfterAudioString, token.indexOf(" ", positionAfterAudioString)).trim();
+
+			// workaround for AAC audio formats
+			if (codec.equals("aac")) {
+				if (token.contains("(LC)")) {
+					codec = FormatConfiguration.AAC_LC;
+				} else if (token.contains("(HE-AAC)")) {
+					codec = FormatConfiguration.HE_AAC;
+				}
+			}
+		} else {
+			codec = token.substring(positionAfterAudioString);
+
+			// workaround for AAC audio formats
+			if (codec.equals("aac")) {
+				codec = FormatConfiguration.AAC_LC;
+			}
+		}
+		return codec;
+	}
+
+	private void getVid(String line){
+		StringTokenizer st = new StringTokenizer(line, ",");
+		while (st.hasMoreTokens()) {
+			String token = st.nextToken().trim();
+			if (token.startsWith("Stream")) {
+				String videoString = "Video: ";
+				int positionAfterVideoString = token.indexOf(videoString) + videoString.length();
+				String codec;
+
+				// Check whether there are more details after the video string
+				if (token.indexOf(" ", positionAfterVideoString) != -1) {
+					codec = token.substring(positionAfterVideoString, token.indexOf(" ", positionAfterVideoString)).trim();
+				} else {
+					codec = token.substring(positionAfterVideoString);
+				}
+
+				codecV = codec;
+				videoTrackCount++;
+			} else if ((token.contains("tbc") || token.contains("tb(c)"))) {
+				// A/V sync issues with newest FFmpeg, due to the new tbr/tbn/tbc outputs
+				// Priority to tb(c)
+				String frameRateDoubleString = token.substring(0, token.indexOf("tb")).trim();
+				try {
+					// tbc taken into account only if different than tbr
+					if (!frameRateDoubleString.equals(frameRate)) {
+						Double frameRateDouble = Double.valueOf(frameRateDoubleString);
+						frameRate = String.format(Locale.ENGLISH, "%.2f", frameRateDouble / 2);
+					}
+				} catch (NumberFormatException nfe) {
+					// Could happen if tbc is "1k" or something like that, no big deal
+					LOGGER.debug("Could not parse frame rate \"" + frameRateDoubleString + "\"");
+				}
+
+			} else if ((token.contains("tbr") || token.contains("tb(r)")) && frameRate == null) {
+				frameRate = token.substring(0, token.indexOf("tb")).trim();
+			} else if ((token.contains("fps") || token.contains("fps(r)")) && frameRate == null) { // dvr-ms ?
+				frameRate = token.substring(0, token.indexOf("fps")).trim();
+			} else if (token.indexOf('x') > -1 && !token.contains("max")) {
+				String resolution = token.trim();
+				if (resolution.contains(" [")) {
+					resolution = resolution.substring(0, resolution.indexOf(" ["));
+				}
+				try {
+					width = Integer.parseInt(resolution.substring(0, resolution.indexOf('x')));
+				} catch (NumberFormatException nfe) {
+					LOGGER.debug("Could not parse width from \"" + resolution.substring(0, resolution.indexOf('x')) + "\"");
+				}
+				try {
+					height = Integer.parseInt(resolution.substring(resolution.indexOf('x') + 1));
+				} catch (NumberFormatException nfe) {
+					LOGGER.debug("Could not parse height from \"" + resolution.substring(resolution.indexOf('x') + 1) + "\"");
+				}
+			}
+		}
+	}
+	private List<MediaChapter> getNewChapters(String line, List<String> lines, ListIterator<String> fFmpegMetaData){
+		int fFmpegMetaDataNr = fFmpegMetaData.nextIndex();
+		if (fFmpegMetaDataNr > -1) {
+			line = lines.get(fFmpegMetaDataNr);
+		}
+		List<MediaChapter> ffmpegChapters = new ArrayList<>();
+		while (line.contains("Chapter #")) {
+			MediaChapter chapter = new MediaChapter();
+			//set chapter id
+			String idStr = line.substring(line.indexOf("Chapter #") + 9);
+			if (idStr.contains(" ")) {
+				idStr = idStr.substring(0, idStr.indexOf(" "));
+			}
+			String[] ids = idStr.split(":");
+			if (ids.length > 1) {
+				chapter.setId(Integer.parseInt(ids[1]));
+			} else {
+				chapter.setId(Integer.parseInt(ids[0]));
+			}
+			//set chapter start
+			if (line.contains("start ")) {
+				String startStr = line.substring(line.indexOf("start ") + 6);
+				if (startStr.contains(" ")) {
+					startStr = startStr.substring(0, startStr.indexOf(" "));
+				}
+				if (startStr.endsWith(",")) {
+					startStr = startStr.substring(0, startStr.length() - 1);
+				}
+				chapter.setStart(Double.parseDouble(startStr));
+			}
+			//set chapter end
+			if (line.contains(" end ")) {
+				String endStr = line.substring(line.indexOf(" end ") + 5);
+				if (endStr.contains(" ")) {
+					endStr = endStr.substring(0, endStr.indexOf(" "));
+				}
+				chapter.setEnd(Double.parseDouble(endStr));
+			}
+			chapter.setLang(MediaLang.UND);
+			fFmpegMetaDataNr += 1;
+			line = lines.get(fFmpegMetaDataNr);
+			if (line.contains("Metadata:")) {
+				fFmpegMetaDataNr += 1;
+				line = lines.get(fFmpegMetaDataNr);
+				while (line.indexOf("      ") == 0) {
+					if (line.contains(": ")) {
+						int aa = line.indexOf(": ");
+						String key = line.substring(0, aa).trim();
+						String value = line.substring(aa + 2);
+						if ("title".equals(key)) {
+							//do not set title if it is default, it will be filled automatically later
+							if (!MediaChapter.isTitleDefault(value)) {
+								chapter.setTitle(value);
+							}
+						} else {
+							LOGGER.debug("New chapter metadata not handled \"" + key + "\" : \"" + value + "\"");
+						}
+						break;
+					} else {
+						fFmpegMetaDataNr += 1;
+						line = lines.get(fFmpegMetaDataNr);
+					}
+				}
+			}
+			ffmpegChapters.add(chapter);
+		}
+		return ffmpegChapters;
+	}
+	private MediaSubtitle setSubtitle(String line, List<String> lines, int subId, ListIterator<String> fFmpegMetaData){
+		MediaSubtitle subtitle = new MediaSubtitle();
+		subtitle = setSubtitleType(line);
+		int a = line.indexOf('(');
+		int b = line.indexOf("):", a);
+		if (a > -1 && b > a) {
+			subtitle.setLang(line.substring(a + 1, b));
+		} else {
+			subtitle.setLang(MediaLang.UND);
+		}
+		subtitle.setId(subId++);
+		subtitle.setDefault(line.contains("(default)"));
+		subtitle.setForced(line.contains("(forced)"));
+		int fFmpegMetaDataNr = fFmpegMetaData.nextIndex();
+		if (fFmpegMetaDataNr > -1) {
+			line = lines.get(fFmpegMetaDataNr);
+		}
+		if (line.contains("Metadata:")) {
+			fFmpegMetaDataNr += 1;
+			line = lines.get(fFmpegMetaDataNr);
+			while (line.indexOf("      ") == 0) {
+				if (line.toLowerCase().contains("title           :")) {
+					int aa = line.indexOf(": ");
+					int bb = line.length();
+					if (aa > -1 && bb > aa) {
+						subtitle.setSubtitlesTrackTitleFromMetadata(line.substring(aa + 2, bb));
+						break;
+					}
+				} else {
+					fFmpegMetaDataNr += 1;
+					line = lines.get(fFmpegMetaDataNr);
+				}
+			}
+		}
+		return subtitle;
+	}
+	private MediaSubtitle setSubtitleType(String line){
+		// $ ffmpeg -codecs | grep "^...S"
+		// ..S... = Subtitle codec
+		// DES... ass                  ASS (Advanced SSA) subtitle
+		// DES... dvb_subtitle         DVB subtitles (decoders: dvbsub ) (encoders: dvbsub )
+		// ..S... dvb_teletext         DVB teletext
+		// DES... dvd_subtitle         DVD subtitles (decoders: dvdsub ) (encoders: dvdsub )
+		// ..S... eia_608              EIA-608 closed captions
+		// D.S... hdmv_pgs_subtitle    HDMV Presentation Graphic Stream subtitles (decoders: pgssub )
+		// D.S... jacosub              JACOsub subtitle
+		// D.S... microdvd             MicroDVD subtitle
+		// DES... mov_text             MOV text
+		// D.S... mpl2                 MPL2 subtitle
+		// D.S... pjs                  PJS (Phoenix Japanimation Society) subtitle
+		// D.S... realtext             RealText subtitle
+		// D.S... sami                 SAMI subtitle
+		// DES... srt                  SubRip subtitle with embedded timing
+		// DES... ssa                  SSA (SubStation Alpha) subtitle
+		// DES... subrip               SubRip subtitle
+		// D.S... subviewer            SubViewer subtitle
+		// D.S... subviewer1           SubViewer v1 subtitle
+		// D.S... text                 raw UTF-8 text
+		// D.S... vplayer              VPlayer subtitle
+		// D.S... webvtt               WebVTT subtitle
+		// DES... xsub                 XSUB
+		MediaSubtitle subtitle = new MediaSubtitle();
+		if (line.contains("srt") || line.contains("subrip")) {
+			subtitle.setType(SubtitleType.SUBRIP);
+		} else if (line.contains(" text")) {
+			// excludes dvb_teletext, mov_text, realtext
+			subtitle.setType(SubtitleType.TEXT);
+		} else if (line.contains("microdvd")) {
+			subtitle.setType(SubtitleType.MICRODVD);
+		} else if (line.contains("sami")) {
+			subtitle.setType(SubtitleType.SAMI);
+		} else if (line.contains("ass") || line.contains("ssa")) {
+			subtitle.setType(SubtitleType.ASS);
+		} else if (line.contains("dvd_subtitle")) {
+			subtitle.setType(SubtitleType.VOBSUB);
+		} else if (line.contains("xsub")) {
+			subtitle.setType(SubtitleType.DIVX);
+		} else if (line.contains("mov_text")) {
+			subtitle.setType(SubtitleType.TX3G);
+		} else if (line.contains("webvtt")) {
+			subtitle.setType(SubtitleType.WEBVTT);
+		} else if (line.contains("eia_608")) {
+			subtitle.setType(SubtitleType.EIA608);
+		} else if (line.contains("dvb_subtitle")) {
+			subtitle.setType(SubtitleType.DVBSUB);
+		} else {
+			subtitle.setType(SubtitleType.UNKNOWN);
+		}
+		return	subtitle;
 	}
 
 	/**
@@ -1472,120 +1518,14 @@ public class MediaInfo implements Cloneable {
 		}
 
 		if (container != null) {
-			mimeType = switch (container) {
-				case FormatConfiguration.AVI -> HTTPResource.AVI_TYPEMIME;
-				case FormatConfiguration.ASF -> HTTPResource.ASF_TYPEMIME;
-				case FormatConfiguration.FLV -> HTTPResource.FLV_TYPEMIME;
-				case FormatConfiguration.M4V -> HTTPResource.M4V_TYPEMIME;
-				case FormatConfiguration.MP4 -> HTTPResource.MP4_TYPEMIME;
-				case FormatConfiguration.MPEGPS -> HTTPResource.MPEG_TYPEMIME;
-				case FormatConfiguration.MPEGTS -> HTTPResource.MPEGTS_TYPEMIME;
-				case FormatConfiguration.MPEGTS_HLS -> HTTPResource.HLS_TYPEMIME;
-				case FormatConfiguration.WMV -> HTTPResource.WMV_TYPEMIME;
-				case FormatConfiguration.MOV -> HTTPResource.MOV_TYPEMIME;
-				case FormatConfiguration.ADPCM -> HTTPResource.AUDIO_ADPCM_TYPEMIME;
-				case FormatConfiguration.ADTS -> HTTPResource.AUDIO_ADTS_TYPEMIME;
-				case FormatConfiguration.M4A -> HTTPResource.AUDIO_M4A_TYPEMIME;
-				case FormatConfiguration.AC3 -> HTTPResource.AUDIO_AC3_TYPEMIME;
-				case FormatConfiguration.AU -> HTTPResource.AUDIO_AU_TYPEMIME;
-				case FormatConfiguration.DFF -> HTTPResource.AUDIO_DFF_TYPEMIME;
-				case FormatConfiguration.DSF -> HTTPResource.AUDIO_DSF_TYPEMIME;
-				case FormatConfiguration.EAC3 -> HTTPResource.AUDIO_EAC3_TYPEMIME;
-				case FormatConfiguration.MPA -> HTTPResource.AUDIO_MPA_TYPEMIME;
-				case FormatConfiguration.MP2 -> HTTPResource.AUDIO_MP2_TYPEMIME;
-				case FormatConfiguration.AIFF -> HTTPResource.AUDIO_AIFF_TYPEMIME;
-				case FormatConfiguration.ATRAC -> HTTPResource.AUDIO_ATRAC_TYPEMIME;
-				case FormatConfiguration.MKA -> HTTPResource.AUDIO_MKA_TYPEMIME;
-				case FormatConfiguration.MLP -> HTTPResource.AUDIO_MLP_TYPEMIME;
-				case FormatConfiguration.MONKEYS_AUDIO -> HTTPResource.AUDIO_APE_TYPEMIME;
-				case FormatConfiguration.MPC -> HTTPResource.AUDIO_MPC_TYPEMIME;
-				case FormatConfiguration.OGG -> HTTPResource.OGG_TYPEMIME;
-				case FormatConfiguration.OGA -> HTTPResource.AUDIO_OGA_TYPEMIME;
-				case FormatConfiguration.RA -> HTTPResource.AUDIO_RA_TYPEMIME;
-				case FormatConfiguration.RM -> HTTPResource.RM_TYPEMIME;
-				case FormatConfiguration.SHORTEN -> HTTPResource.AUDIO_SHN_TYPEMIME;
-				case FormatConfiguration.THREEGA -> HTTPResource.AUDIO_THREEGPPA_TYPEMIME;
-				case FormatConfiguration.TRUEHD -> HTTPResource.AUDIO_TRUEHD_TYPEMIME;
-				case FormatConfiguration.TTA -> HTTPResource.AUDIO_TTA_TYPEMIME;
-				case FormatConfiguration.WAVPACK -> HTTPResource.AUDIO_WV_TYPEMIME;
-				case FormatConfiguration.WEBA -> HTTPResource.AUDIO_WEBM_TYPEMIME;
-				case FormatConfiguration.WEBP -> HTTPResource.WEBP_TYPEMIME;
-				case FormatConfiguration.WMA, FormatConfiguration.WMA10 -> HTTPResource.AUDIO_WMA_TYPEMIME;
-				default -> mimeType;
-			};
+			mimeType = setConfig();
 		}
 
 		if (mimeType == null) {
 			if (codecV != null && !codecV.equals(MediaLang.UND)) {
-				if ("matroska".equals(container) || "mkv".equals(container)) {
-					mimeType = HTTPResource.MATROSKA_TYPEMIME;
-				} else if ("ogg".equals(container)) {
-					mimeType = HTTPResource.OGG_TYPEMIME;
-				} else if ("3gp".equals(container)) {
-					mimeType = HTTPResource.THREEGPP_TYPEMIME;
-				} else if ("3g2".equals(container)) {
-					mimeType = HTTPResource.THREEGPP2_TYPEMIME;
-				} else if ("webm".equals(container)) {
-					mimeType = HTTPResource.WEBM_TYPEMIME;
-				} else if (container.startsWith("flash")) {
-					mimeType = HTTPResource.FLV_TYPEMIME;
-				} else if (codecV.equals("mjpeg") || "jpg".equals(container)) {
-					mimeType = HTTPResource.JPEG_TYPEMIME;
-				} else if ("png".equals(codecV) || "png".equals(container)) {
-					mimeType = HTTPResource.PNG_TYPEMIME;
-				} else if ("gif".equals(codecV) || "gif".equals(container)) {
-					mimeType = HTTPResource.GIF_TYPEMIME;
-				} else if ("tiff".equals(codecV) || "tiff".equals(container)) {
-					mimeType = HTTPResource.TIFF_TYPEMIME;
-				} else if ("bmp".equals(codecV) || "bmp".equals(container)) {
-					mimeType = HTTPResource.BMP_TYPEMIME;
-				} else if (codecV.startsWith("h264") || codecV.equals("h263") || codecV.equals("mpeg4") || codecV.equals("mp4")) {
-					mimeType = HTTPResource.MP4_TYPEMIME;
-				} else if (codecV.contains("mpeg") || codecV.contains("mpg")) {
-					mimeType = HTTPResource.MPEG_TYPEMIME;
-				}
+				mimeType = setResV();
 			} else if ((codecV == null || codecV.equals(MediaLang.UND)) && codecA != null) {
-				if ("ogg".equals(container) || "oga".equals(container)) {
-					mimeType = HTTPResource.AUDIO_OGA_TYPEMIME;
-				} else if ("3gp".equals(container)) {
-					mimeType = HTTPResource.AUDIO_THREEGPPA_TYPEMIME;
-				} else if ("3g2".equals(container)) {
-					mimeType = HTTPResource.AUDIO_THREEGPP2A_TYPEMIME;
-				} else if ("adts".equals(container)) {
-					mimeType = HTTPResource.AUDIO_ADTS_TYPEMIME;
-				} else if ("matroska".equals(container) || "mkv".equals(container)) {
-					mimeType = HTTPResource.AUDIO_MKA_TYPEMIME;
-				} else if ("webm".equals(container)) {
-					mimeType = HTTPResource.AUDIO_WEBM_TYPEMIME;
-				} else if (codecA.contains("mp3")) {
-					mimeType = HTTPResource.AUDIO_MP3_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.MPA)) {
-					mimeType = HTTPResource.AUDIO_MPA_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.MP2)) {
-					mimeType = HTTPResource.AUDIO_MP2_TYPEMIME;
-				} else if (codecA.contains("flac")) {
-					mimeType = HTTPResource.AUDIO_FLAC_TYPEMIME;
-				} else if (codecA.contains("vorbis")) {
-					mimeType = HTTPResource.AUDIO_VORBIS_TYPEMIME;
-				} else if (codecA.contains("asf") || codecA.startsWith("wm")) {
-					mimeType = HTTPResource.AUDIO_WMA_TYPEMIME;
-				} else if (codecA.contains("pcm") || codecA.contains("wav") || codecA.contains("dts")) {
-					mimeType = HTTPResource.AUDIO_WAV_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.TRUEHD)) {
-					mimeType = HTTPResource.AUDIO_TRUEHD_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.DTS)) {
-					mimeType = HTTPResource.AUDIO_DTS_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.DTSHD)) {
-					mimeType = HTTPResource.AUDIO_DTSHD_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.EAC3)) {
-					mimeType = HTTPResource.AUDIO_EAC3_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.ADPCM)) {
-					mimeType = HTTPResource.AUDIO_ADPCM_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.DFF)) {
-					mimeType = HTTPResource.AUDIO_DFF_TYPEMIME;
-				} else if (codecA.equals(FormatConfiguration.DSF)) {
-					mimeType = HTTPResource.AUDIO_DSF_TYPEMIME;
-				}
+				mimeType = setResA(mimeType, codecA);
 			}
 
 			if (mimeType == null) {
@@ -1596,6 +1536,129 @@ public class MediaInfo implements Cloneable {
 		if (getFirstAudioTrack() == null || !(type == Format.AUDIO && getFirstAudioTrack().getBitsperSample() == 24 && getFirstAudioTrack().getSampleRate() > 48000)) {
 			secondaryFormatValid = false;
 		}
+	}
+
+	private String setConfig(){
+		// configure function?
+		mimeType = switch (container) {
+			case FormatConfiguration.AVI -> HTTPResource.AVI_TYPEMIME;
+			case FormatConfiguration.ASF -> HTTPResource.ASF_TYPEMIME;
+			case FormatConfiguration.FLV -> HTTPResource.FLV_TYPEMIME;
+			case FormatConfiguration.M4V -> HTTPResource.M4V_TYPEMIME;
+			case FormatConfiguration.MP4 -> HTTPResource.MP4_TYPEMIME;
+			case FormatConfiguration.MPEGPS -> HTTPResource.MPEG_TYPEMIME;
+			case FormatConfiguration.MPEGTS -> HTTPResource.MPEGTS_TYPEMIME;
+			case FormatConfiguration.MPEGTS_HLS -> HTTPResource.HLS_TYPEMIME;
+			case FormatConfiguration.WMV -> HTTPResource.WMV_TYPEMIME;
+			case FormatConfiguration.MOV -> HTTPResource.MOV_TYPEMIME;
+			case FormatConfiguration.ADPCM -> HTTPResource.AUDIO_ADPCM_TYPEMIME;
+			case FormatConfiguration.ADTS -> HTTPResource.AUDIO_ADTS_TYPEMIME;
+			case FormatConfiguration.M4A -> HTTPResource.AUDIO_M4A_TYPEMIME;
+			case FormatConfiguration.AC3 -> HTTPResource.AUDIO_AC3_TYPEMIME;
+			case FormatConfiguration.AU -> HTTPResource.AUDIO_AU_TYPEMIME;
+			case FormatConfiguration.DFF -> HTTPResource.AUDIO_DFF_TYPEMIME;
+			case FormatConfiguration.DSF -> HTTPResource.AUDIO_DSF_TYPEMIME;
+			case FormatConfiguration.EAC3 -> HTTPResource.AUDIO_EAC3_TYPEMIME;
+			case FormatConfiguration.MPA -> HTTPResource.AUDIO_MPA_TYPEMIME;
+			case FormatConfiguration.MP2 -> HTTPResource.AUDIO_MP2_TYPEMIME;
+			case FormatConfiguration.AIFF -> HTTPResource.AUDIO_AIFF_TYPEMIME;
+			case FormatConfiguration.ATRAC -> HTTPResource.AUDIO_ATRAC_TYPEMIME;
+			case FormatConfiguration.MKA -> HTTPResource.AUDIO_MKA_TYPEMIME;
+			case FormatConfiguration.MLP -> HTTPResource.AUDIO_MLP_TYPEMIME;
+			case FormatConfiguration.MONKEYS_AUDIO -> HTTPResource.AUDIO_APE_TYPEMIME;
+			case FormatConfiguration.MPC -> HTTPResource.AUDIO_MPC_TYPEMIME;
+			case FormatConfiguration.OGG -> HTTPResource.OGG_TYPEMIME;
+			case FormatConfiguration.OGA -> HTTPResource.AUDIO_OGA_TYPEMIME;
+			case FormatConfiguration.RA -> HTTPResource.AUDIO_RA_TYPEMIME;
+			case FormatConfiguration.RM -> HTTPResource.RM_TYPEMIME;
+			case FormatConfiguration.SHORTEN -> HTTPResource.AUDIO_SHN_TYPEMIME;
+			case FormatConfiguration.THREEGA -> HTTPResource.AUDIO_THREEGPPA_TYPEMIME;
+			case FormatConfiguration.TRUEHD -> HTTPResource.AUDIO_TRUEHD_TYPEMIME;
+			case FormatConfiguration.TTA -> HTTPResource.AUDIO_TTA_TYPEMIME;
+			case FormatConfiguration.WAVPACK -> HTTPResource.AUDIO_WV_TYPEMIME;
+			case FormatConfiguration.WEBA -> HTTPResource.AUDIO_WEBM_TYPEMIME;
+			case FormatConfiguration.WEBP -> HTTPResource.WEBP_TYPEMIME;
+			case FormatConfiguration.WMA, FormatConfiguration.WMA10 -> HTTPResource.AUDIO_WMA_TYPEMIME;
+			default -> mimeType;
+		};
+		return mimeType;
+	}
+	private String setResA(String mimeType, String codecA){
+		// make this a seperate function to break up the conditionals
+		if ("ogg".equals(container) || "oga".equals(container)) {
+			mimeType = HTTPResource.AUDIO_OGA_TYPEMIME;
+		} else if ("3gp".equals(container)) {
+			mimeType = HTTPResource.AUDIO_THREEGPPA_TYPEMIME;
+		} else if ("3g2".equals(container)) {
+			mimeType = HTTPResource.AUDIO_THREEGPP2A_TYPEMIME;
+		} else if ("adts".equals(container)) {
+			mimeType = HTTPResource.AUDIO_ADTS_TYPEMIME;
+		} else if ("matroska".equals(container) || "mkv".equals(container)) {
+			mimeType = HTTPResource.AUDIO_MKA_TYPEMIME;
+		} else if ("webm".equals(container)) {
+			mimeType = HTTPResource.AUDIO_WEBM_TYPEMIME;
+		} else if (codecA.contains("mp3")) {
+			mimeType = HTTPResource.AUDIO_MP3_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.MPA)) {
+			mimeType = HTTPResource.AUDIO_MPA_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.MP2)) {
+			mimeType = HTTPResource.AUDIO_MP2_TYPEMIME;
+		} else if (codecA.contains("flac")) {
+			mimeType = HTTPResource.AUDIO_FLAC_TYPEMIME;
+		} else if (codecA.contains("vorbis")) {
+			mimeType = HTTPResource.AUDIO_VORBIS_TYPEMIME;
+		} else if (codecA.contains("asf") || codecA.startsWith("wm")) {
+			mimeType = HTTPResource.AUDIO_WMA_TYPEMIME;
+		} else if (codecA.contains("pcm") || codecA.contains("wav") || codecA.contains("dts")) {
+			mimeType = HTTPResource.AUDIO_WAV_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.TRUEHD)) {
+			mimeType = HTTPResource.AUDIO_TRUEHD_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.DTS)) {
+			mimeType = HTTPResource.AUDIO_DTS_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.DTSHD)) {
+			mimeType = HTTPResource.AUDIO_DTSHD_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.EAC3)) {
+			mimeType = HTTPResource.AUDIO_EAC3_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.ADPCM)) {
+			mimeType = HTTPResource.AUDIO_ADPCM_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.DFF)) {
+			mimeType = HTTPResource.AUDIO_DFF_TYPEMIME;
+		} else if (codecA.equals(FormatConfiguration.DSF)) {
+			mimeType = HTTPResource.AUDIO_DSF_TYPEMIME;
+		}
+		return mimeType;
+	}
+
+	private String setResV(){
+		// function
+		if ("matroska".equals(container) || "mkv".equals(container)) {
+			mimeType = HTTPResource.MATROSKA_TYPEMIME;
+		} else if ("ogg".equals(container)) {
+			mimeType = HTTPResource.OGG_TYPEMIME;
+		} else if ("3gp".equals(container)) {
+			mimeType = HTTPResource.THREEGPP_TYPEMIME;
+		} else if ("3g2".equals(container)) {
+			mimeType = HTTPResource.THREEGPP2_TYPEMIME;
+		} else if ("webm".equals(container)) {
+			mimeType = HTTPResource.WEBM_TYPEMIME;
+		} else if (container.startsWith("flash")) {
+			mimeType = HTTPResource.FLV_TYPEMIME;
+		} else if (codecV.equals("mjpeg") || "jpg".equals(container)) {
+			mimeType = HTTPResource.JPEG_TYPEMIME;
+		} else if ("png".equals(codecV) || "png".equals(container)) {
+			mimeType = HTTPResource.PNG_TYPEMIME;
+		} else if ("gif".equals(codecV) || "gif".equals(container)) {
+			mimeType = HTTPResource.GIF_TYPEMIME;
+		} else if ("tiff".equals(codecV) || "tiff".equals(container)) {
+			mimeType = HTTPResource.TIFF_TYPEMIME;
+		} else if ("bmp".equals(codecV) || "bmp".equals(container)) {
+			mimeType = HTTPResource.BMP_TYPEMIME;
+		} else if (codecV.startsWith("h264") || codecV.equals("h263") || codecV.equals("mpeg4") || codecV.equals("mp4")) {
+			mimeType = HTTPResource.MP4_TYPEMIME;
+		} else if (codecV.contains("mpeg") || codecV.contains("mpg")) {
+			mimeType = HTTPResource.MPEG_TYPEMIME;
+		}
+		return mimeType;
 	}
 
 	/**
@@ -2162,87 +2225,6 @@ public class MediaInfo implements Cloneable {
 
 		return hdrFormatInRendererFormat;
 	}
-
-/*
-	public String getIMDbID() {
-		return imdbID;
-	}
-
-	public void setIMDbID(String value) {
-		this.imdbID = value;
-	}
-
-	public String getYear() {
-		return year;
-	}
-
-	public void setYear(String value) {
-		this.year = value;
-	}
-
-	public String getTVSeriesStartYear() {
-		return tvSeriesStartYear;
-	}
-
-	public void setTVSeriesStartYear(String value) {
-		this.tvSeriesStartYear = value;
-	}
-
-	public String getMovieOrShowName() {
-		return tvShowName;
-	}
-
-	public void setMovieOrShowName(String value) {
-		this.tvShowName = value;
-	}
-
-	public String getSimplifiedMovieOrShowName() {
-		return simplifiedTvShowName;
-	}
-
-	public void setSimplifiedMovieOrShowName(String value) {
-		this.simplifiedTvShowName = value;
-	}
-
-	public String getTVSeason() {
-		return tvSeason;
-	}
-
-	public void setTVSeason(String value) {
-		this.tvSeason = value;
-	}
-
-	public String getTVEpisodeNumber() {
-		return tvEpisodeNumber;
-	}
-
-	public String getTVEpisodeNumberUnpadded() {
-		if (isNotBlank(tvEpisodeNumber) && tvEpisodeNumber.length() > 1 && tvEpisodeNumber.startsWith("0")) {
-			return tvEpisodeNumber.substring(1);
-		}
-		return tvEpisodeNumber;
-	}
-
-	public void setTVEpisodeNumber(String value) {
-		this.tvEpisodeNumber = value;
-	}
-
-	public String getTVEpisodeName() {
-		return tvEpisodeName;
-	}
-
-	public void setTVEpisodeName(String value) {
-		this.tvEpisodeName = value;
-	}
-
-	public boolean isTVEpisode() {
-		return isTVEpisode;
-	}
-
-	public void setIsTVEpisode(boolean value) {
-		this.isTVEpisode = value;
-	}
-*/
 
 	public boolean hasVideoMetadata() {
 		return videoMetadata != null;
@@ -3270,49 +3252,13 @@ public class MediaInfo implements Cloneable {
 		}
 		for (Entry<String, AudioVariantInfo> entry : AUDIO_OR_VIDEO_CONTAINERS.entrySet()) {
 			if (
-				container.equals(entry.getKey()) ||
-				container.equals(entry.getValue().getFormatConfiguration())
+					container.equals(entry.getKey()) ||
+							container.equals(entry.getValue().getFormatConfiguration())
 			) {
 				return entry.getValue();
 			}
 		}
 		return null;
 	}
-
-	/**
-	 * An immutable struct/record for hold information for a particular audio
-	 * variant for containers that can constitute multiple "media types".
-	 */
-	public static class AudioVariantInfo {
-
-		protected final Format format;
-		protected final String formatConfiguration;
-
-		/**
-		 * Creates a new instance.
-		 *
-		 * @param format the {@link Format} for this {@link AudioVariantInfo}.
-		 * @param formatConfiguration the {@link FormatConfiguration}
-		 *            {@link String} constant for this {@link AudioVariantInfo}.
-		 */
-		public AudioVariantInfo(Format format, String formatConfiguration) {
-			this.format = format;
-			this.formatConfiguration = formatConfiguration;
-		}
-
-		/**
-		 * @return the {@link Format}.
-		 */
-		public Format getFormat() {
-			return format;
-		}
-
-		/**
-		 * @return the {@link FormatConfiguration} {@link String} constant.
-		 */
-		public String getFormatConfiguration() {
-			return formatConfiguration;
-		}
-	}
-
 }
+

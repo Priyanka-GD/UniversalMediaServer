@@ -209,6 +209,10 @@ public class PMS {
 		}
 	}
 
+	// Moving server related functions to new file
+	private Servers servers;
+
+
 	/**
 	 * UPnP mediaServer that serves the XML files, media files and broadcast messages needed by UPnP Service.
 	 */
@@ -352,6 +356,80 @@ public class PMS {
 
 	}
 
+	// breaking up init
+
+
+	private void logIo(){
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("");
+			LOGGER.trace("Registered ImageIO reader classes:");
+			Iterator<ImageReaderSpi> readerIterator = IIORegistry.getDefaultInstance().getServiceProviders(ImageReaderSpi.class, true);
+			while (readerIterator.hasNext()) {
+				ImageReaderSpi reader = readerIterator.next();
+				LOGGER.trace("Reader class: {}", reader.getPluginClassName());
+			}
+			LOGGER.trace("");
+			LOGGER.trace("Registered ImageIO writer classes:");
+			Iterator<ImageWriterSpi> writerIterator = IIORegistry.getDefaultInstance().getServiceProviders(ImageWriterSpi.class, true);
+			while (writerIterator.hasNext()) {
+				ImageWriterSpi writer = writerIterator.next();
+				LOGGER.trace("Writer class: {}", writer.getPluginClassName());
+			}
+			LOGGER.trace("");
+		}
+	}
+
+	private void runWizard(Splash splash){
+		if (umsConfiguration.isRunWizard() && !isHeadless()) {
+			// Hide splash screen
+			if (splash != null) {
+				splash.setVisible(false);
+			}
+
+			// Run wizard
+			Wizard.run(umsConfiguration);
+
+			// Unhide splash screen
+			if (splash != null) {
+				splash.setVisible(true);
+			}
+		}
+	}
+
+	private void runFirstTimeSetup(){
+		if (!umsConfiguration.hasRunOnce()) {
+			/*
+			 * Enable youtube-dl once, to ensure that if it is
+			 * disabled, that was done by the user.
+			 */
+			if (!EngineFactory.isEngineActive(YoutubeDl.ID)) {
+				umsConfiguration.setEngineEnabled(YoutubeDl.ID, true);
+				umsConfiguration.setEnginePriorityBelow(YoutubeDl.ID, FFmpegWebVideo.ID);
+			}
+
+			// Ensure this only happens once
+			umsConfiguration.setHasRunOnce();
+		}
+	}
+
+	private void checkVSFilter(){
+		// Check the existence of VSFilter / DirectVobSub
+		if (PlatformUtils.INSTANCE.isAviSynthAvailable() && PlatformUtils.INSTANCE.getAvsPluginsDir() != null) {
+			LOGGER.debug("AviSynth plugins directory: " + PlatformUtils.INSTANCE.getAvsPluginsDir().getAbsolutePath());
+			File vsFilterDLL = new File(PlatformUtils.INSTANCE.getAvsPluginsDir(), "VSFilter.dll");
+			if (vsFilterDLL.exists()) {
+				LOGGER.debug("VSFilter / DirectVobSub was found in the AviSynth plugins directory.");
+			} else {
+				File vsFilterDLL2 = new File(PlatformUtils.INSTANCE.getKLiteFiltersDir(), "vsfilter.dll");
+				if (vsFilterDLL2.exists()) {
+					LOGGER.debug("VSFilter / DirectVobSub was found in the K-Lite Codec Pack filters directory.");
+				} else {
+					LOGGER.info("VSFilter / DirectVobSub was not found. This can cause problems when trying to play subtitled videos with AviSynth.");
+				}
+			}
+		}
+	}
+
 	/**
 	 * Initialization procedure.
 	 *
@@ -386,12 +464,11 @@ public class PMS {
 			}
 		}
 
-		// Initialize splash screen
 		WindowPropertiesConfiguration windowConfiguration = null;
 		Splash splash = null;
 		if (!isHeadless()) {
 			windowConfiguration = new WindowPropertiesConfiguration(
-				Paths.get(umsConfiguration.getProfileDirectory()).resolve("UMS.dat")
+					Paths.get(umsConfiguration.getProfileDirectory()).resolve("UMS.dat")
 			);
 			splash = new Splash(umsConfiguration, windowConfiguration.getGraphicsConfiguration());
 		}
@@ -415,25 +492,10 @@ public class PMS {
 		DLNAResource.bumpSystemUpdateId();
 
 		// Log registered ImageIO plugins
-		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("");
-			LOGGER.trace("Registered ImageIO reader classes:");
-			Iterator<ImageReaderSpi> readerIterator = IIORegistry.getDefaultInstance().getServiceProviders(ImageReaderSpi.class, true);
-			while (readerIterator.hasNext()) {
-				ImageReaderSpi reader = readerIterator.next();
-				LOGGER.trace("Reader class: {}", reader.getPluginClassName());
-			}
-			LOGGER.trace("");
-			LOGGER.trace("Registered ImageIO writer classes:");
-			Iterator<ImageWriterSpi> writerIterator = IIORegistry.getDefaultInstance().getServiceProviders(ImageWriterSpi.class, true);
-			while (writerIterator.hasNext()) {
-				ImageWriterSpi writer = writerIterator.next();
-				LOGGER.trace("Writer class: {}", writer.getPluginClassName());
-			}
-			LOGGER.trace("");
-		}
+		logIo();
 
 		// Wizard
+<<<<<<< Updated upstream
 		if (umsConfiguration.isRunWizard() && !isHeadless() && !isRunningTests()) {
 			// Hide splash screen
 			if (splash != null) {
@@ -448,6 +510,9 @@ public class PMS {
 				splash.setVisible(true);
 			}
 		}
+=======
+		runWizard(splash);
+>>>>>>> Stashed changes
 
 		globalRepo = new GlobalIdRepo();
 		LOGGER.trace("Initialized globalRepo");
@@ -472,19 +537,7 @@ public class PMS {
 		}
 
 		// Actions that happen only the first time UMS runs
-		if (!umsConfiguration.hasRunOnce()) {
-			/*
-			 * Enable youtube-dl once, to ensure that if it is
-			 * disabled, that was done by the user.
-			 */
-			if (!EngineFactory.isEngineActive(YoutubeDl.ID)) {
-				umsConfiguration.setEngineEnabled(YoutubeDl.ID, true);
-				umsConfiguration.setEnginePriorityBelow(YoutubeDl.ID, FFmpegWebVideo.ID);
-			}
-
-			// Ensure this only happens once
-			umsConfiguration.setHasRunOnce();
-		}
+		runFirstTimeSetup();
 
 		GuiManager.setScanLibraryStatus(umsConfiguration.getUseCache(), false);
 		if (!isHeadless()) {
@@ -508,7 +561,7 @@ public class PMS {
 				} else if (UmsConfiguration.NEED_WEB_GUI_SERVER_RELOAD_FLAGS.contains(event.getPropertyName())) {
 					GuiManager.setReloadable(true);
 				} else if (UmsConfiguration.NEED_WEB_PLAYER_SERVER_RELOAD_FLAGS.contains(event.getPropertyName())) {
-					resetWebPlayerServer();
+					servers.resetWebPlayerServer(LOGGER, umsConfiguration);
 				} else if (UmsConfiguration.NEED_MEDIA_LIBRARY_RELOAD_FLAGS.contains(event.getPropertyName())) {
 					resetMediaLibrary();
 				} else if (UmsConfiguration.NEED_RENDERERS_ROOT_RELOAD_FLAGS.contains(event.getPropertyName())) {
@@ -519,9 +572,9 @@ public class PMS {
 		});
 
 		// GUI stuff
-		resetWebGuiServer();
+		servers.resetWebGuiServer(LOGGER, umsConfiguration);
 		// Web player stuff
-		resetWebPlayerServer();
+		servers.resetWebPlayerServer(LOGGER, umsConfiguration);
 
 		// init Credentials
 		credMgr = new CredMgr(umsConfiguration.getCredFile());
@@ -570,20 +623,7 @@ public class PMS {
 		GuiManager.setConnectionState(EConnectionState.SEARCHING);
 
 		// Check the existence of VSFilter / DirectVobSub
-		if (PlatformUtils.INSTANCE.isAviSynthAvailable() && PlatformUtils.INSTANCE.getAvsPluginsDir() != null) {
-			LOGGER.debug("AviSynth plugins directory: " + PlatformUtils.INSTANCE.getAvsPluginsDir().getAbsolutePath());
-			File vsFilterDLL = new File(PlatformUtils.INSTANCE.getAvsPluginsDir(), "VSFilter.dll");
-			if (vsFilterDLL.exists()) {
-				LOGGER.debug("VSFilter / DirectVobSub was found in the AviSynth plugins directory.");
-			} else {
-				File vsFilterDLL2 = new File(PlatformUtils.INSTANCE.getKLiteFiltersDir(), "vsfilter.dll");
-				if (vsFilterDLL2.exists()) {
-					LOGGER.debug("VSFilter / DirectVobSub was found in the K-Lite Codec Pack filters directory.");
-				} else {
-					LOGGER.info("VSFilter / DirectVobSub was not found. This can cause problems when trying to play subtitled videos with AviSynth.");
-				}
-			}
-		}
+		checkVSFilter();
 
 		// Check if Kerio is installed
 		if (PlatformUtils.INSTANCE.isKerioFirewall()) {
@@ -688,24 +728,10 @@ public class PMS {
 	// XXX: don't try to optimize this by reusing the same HttpMediaServer instance.
 	// see the comment above HttpMediaServer.stop()
 	public void resetMediaServer() {
-		TaskRunner.getInstance().submitNamed("restart", true, () -> {
-			SseApiServlet.notify("server-restart", "Server is restarting", "Server status", "red", true);
-			MediaServer.stop();
-			resetRenderers(true);
-
-			LOGGER.trace("Waiting 1 second...");
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				LOGGER.trace("Caught exception", e);
-			}
-
-			// re-create the server because may happened the
-			// change of the used interface
-			MediaServer.start();
-			GuiManager.setReloadable(false);
-		});
+		servers.resetMediaServer(LOGGER);
 	}
+
+
 
 	/**
 	 * Reset renderers.
@@ -824,18 +850,7 @@ public class PMS {
 	 * @return {@link String} with the user friendly name.
 	 */
 	public String getServerName() {
-		if (serverName == null) {
-			StringBuilder sb = new StringBuilder();
-			sb.append(System.getProperty("os.name").replace(" ", "_"));
-			sb.append('-');
-			sb.append(System.getProperty("os.arch").replace(" ", "_"));
-			sb.append('-');
-			sb.append(System.getProperty("os.version").replace(" ", "_"));
-			sb.append(", UPnP/1.0 DLNADOC/1.50, UMS/").append(getVersion());
-			serverName = sb.toString();
-		}
-
-		return serverName;
+		return servers.getServerName(getVersion());
 	}
 
 	/**
@@ -1041,15 +1056,15 @@ public class PMS {
 	}
 
 	public MediaServer getMediaServer() {
-		return mediaServer;
+		return servers.getMediaServer();
 	}
 
 	public WebGuiServer getGuiServer() {
-		return webGuiServer;
+		return servers.getGuiServer();
 	}
 
 	public WebPlayerServer getWebPlayerServer() {
-		return webPlayerServer;
+		return servers.getWebPlayerServer();
 	}
 
 	/**
