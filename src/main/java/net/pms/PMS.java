@@ -268,15 +268,7 @@ public class PMS {
 		);
 
 		if (PlatformUtils.isMac() && !PlatformUtils.getOSVersion().isGreaterThanOrEqualTo("10.6.0")) {
-			LOGGER.warn("-----------------------------------------------------------------");
-			LOGGER.warn("WARNING!");
-			LOGGER.warn("UMS ships with external binaries compiled for Mac OS X 10.6 or");
-			LOGGER.warn("higher. You are running an older version of Mac OS X which means");
-			LOGGER.warn("that these binaries used for example for transcoding may not work!");
-			LOGGER.warn("To solve this, replace the binaries found in the \"osx\"");
-			LOGGER.warn("subfolder with versions compiled for your version of OS X.");
-			LOGGER.warn("-----------------------------------------------------------------");
-			LOGGER.warn("");
+			macWarning();
 		}
 
 		String cwd = new File("").getAbsolutePath();
@@ -357,6 +349,23 @@ public class PMS {
 		// Start this here to let the converison work
 		tfm.schedule();
 
+	}
+	
+	/**
+	 * Used warn the user if they are using a Mac.
+	 * 
+	 */
+	private void macWarning()
+	{
+		LOGGER.warn("-----------------------------------------------------------------");
+		LOGGER.warn("WARNING!");
+		LOGGER.warn("UMS ships with external binaries compiled for Mac OS X 10.6 or");
+		LOGGER.warn("higher. You are running an older version of Mac OS X which means");
+		LOGGER.warn("that these binaries used for example for transcoding may not work!");
+		LOGGER.warn("To solve this, replace the binaries found in the \"osx\"");
+		LOGGER.warn("subfolder with versions compiled for your version of OS X.");
+		LOGGER.warn("-----------------------------------------------------------------");
+		LOGGER.warn("");
 	}
 
 	/**

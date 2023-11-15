@@ -103,22 +103,7 @@ public class SettingsApiServlet extends GuiHttpServlet {
 				JsonObject jsonResponse = new JsonObject();
 
 				// immutable data
-				jsonResponse.add("userSettingsDefaults", WEB_SETTINGS_WITH_DEFAULTS);
-				jsonResponse.add("serverEngines", SERVER_ENGINES);
-				jsonResponse.add("audioCoverSuppliers", AUDIO_COVER_SUPPLIERS);
-				jsonResponse.add("sortMethods", SORT_METHODS);
-				jsonResponse.add("subtitlesInfoLevels", SUBTITLES_INFO_LEVELS);
-				jsonResponse.add("transcodingEnginesPurposes", TRANSCODING_ENGINES_PURPOSES);
-				jsonResponse.add("subtitlesCodepages", SUBTITLES_CODEPAGES);
-				jsonResponse.add("subtitlesDepth", SUBTITLES_DEPTH);
-				jsonResponse.add("ffmpegLoglevels", FFMPEG_LOGLEVEL);
-				jsonResponse.add("fullyPlayedActions", FULLY_PLAYED_ACTIONS);
-				jsonResponse.add("networkInterfaces", NetworkConfiguration.getNetworkInterfacesAsJsonArray());
-				jsonResponse.add("allRendererNames", RendererConfigurations.getAllRendererNamesAsJsonArray());
-				jsonResponse.add("enabledRendererNames", RendererConfigurations.getEnabledRendererNamesAsJsonArray());
-				jsonResponse.add("transcodingEngines", UmsConfiguration.getAllEnginesAsJsonObject());
-				jsonResponse.add("gpuEncodingH264AccelerationMethods", GPU_ENCODING_H264_ACCELERATION_METHODS);
-				jsonResponse.add("gpuEncodingH265AccelerationMethods", GPU_ENCODING_H265_ACCELERATION_METHODS);
+				p(jsonResponse);
 
 				String configurationAsJsonString = getConfigurationAsJsonString();
 				JsonObject configurationAsJson = JsonParser.parseString(configurationAsJsonString).getAsJsonObject();
@@ -329,6 +314,26 @@ public class SettingsApiServlet extends GuiHttpServlet {
 		jsonResponse.add("separator", new JsonPrimitive(File.separator));
 		return jsonResponse.toString();
 	}
+	
+	public static void p (JsonObject jsonResponse)
+	{
+		jsonResponse.add("userSettingsDefaults", WEB_SETTINGS_WITH_DEFAULTS);
+		jsonResponse.add("serverEngines", SERVER_ENGINES);
+		jsonResponse.add("audioCoverSuppliers", AUDIO_COVER_SUPPLIERS);
+		jsonResponse.add("sortMethods", SORT_METHODS);
+		jsonResponse.add("subtitlesInfoLevels", SUBTITLES_INFO_LEVELS);
+		jsonResponse.add("transcodingEnginesPurposes", TRANSCODING_ENGINES_PURPOSES);
+		jsonResponse.add("subtitlesCodepages", SUBTITLES_CODEPAGES);
+		jsonResponse.add("subtitlesDepth", SUBTITLES_DEPTH);
+		jsonResponse.add("ffmpegLoglevels", FFMPEG_LOGLEVEL);
+		jsonResponse.add("fullyPlayedActions", FULLY_PLAYED_ACTIONS);
+		jsonResponse.add("networkInterfaces", NetworkConfiguration.getNetworkInterfacesAsJsonArray());
+		jsonResponse.add("allRendererNames", RendererConfigurations.getAllRendererNamesAsJsonArray());
+		jsonResponse.add("enabledRendererNames", RendererConfigurations.getEnabledRendererNamesAsJsonArray());
+		jsonResponse.add("transcodingEngines", UmsConfiguration.getAllEnginesAsJsonObject());
+		jsonResponse.add("gpuEncodingH264AccelerationMethods", GPU_ENCODING_H264_ACCELERATION_METHODS);
+		jsonResponse.add("gpuEncodingH265AccelerationMethods", GPU_ENCODING_H265_ACCELERATION_METHODS);
+	}	
 
 	public static String getConfigurationUpdate(String key) {
 		if (haveKey(key)) {
