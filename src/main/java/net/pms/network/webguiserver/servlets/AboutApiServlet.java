@@ -42,55 +42,83 @@ import oshi.software.os.OperatingSystem;
 @WebServlet(name = "AboutApiServlet", urlPatterns = {"/v1/api/about"}, displayName = "About Api Servlet")
 public class AboutApiServlet extends GuiHttpServlet {
 	private static final Logger LOGGER = LoggerFactory.getLogger(AboutApiServlet.class);
+    private static final String GIT_COMMIT_ID = "git.commit.id";
+    private static final String COMMIT_URL_TEMPLATE = "https://github.com/UniversalMediaServer/UniversalMediaServer/tree/";
+    private static final String JSON_CONTENT_TYPE = "application/json";
+    private static final int SUCCESS_RESPONSE_CODE = 200;
+
 
 	private static SystemInfo systemInfo;
 	private static HardwareAbstractionLayer hardware;
 
-	@Override
-	protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-		try {
-			var path = req.getPathInfo();
-			if (path.equals("/")) {
-				JsonObject jsonResponse = new JsonObject();
-				jsonResponse.addProperty("app", PropertiesUtil.getProjectProperties().get("project.name"));
-				jsonResponse.addProperty("version", PMS.getVersion());
-				String commitId = PropertiesUtil.getProjectProperties().get("git.commit.id");
-				jsonResponse.addProperty("commit", commitId.substring(0, 9) + " (" + PropertiesUtil.getProjectProperties().get("git.commit.time") + ")");
-				jsonResponse.addProperty("commitUrl", "https://github.com/UniversalMediaServer/UniversalMediaServer/tree/" + commitId);
-				jsonResponse.addProperty("website", "https://www.universalmediaserver.com");
-				jsonResponse.addProperty("licence", "GNU General Public License version 2");
-				jsonResponse.addProperty("licenceUrl", "https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt");
-				JsonArray jsonlinks = new JsonArray();
-				jsonlinks.add(toJsonObject("Crowdin", PMS.CROWDIN_LINK));
-				jsonlinks.add(toJsonObject("FFmpeg", "https://ffmpeg.org/"));
-				jsonlinks.add(toJsonObject("MPlayer", "http://www.mplayerhq.hu"));
-				jsonlinks.add(toJsonObject("MPlayer, MEncoder and InterFrame builds", "https://www.spirton.com"));
-				jsonlinks.add(toJsonObject("MediaInfo", "https://mediaarea.net/en/MediaInfo"));
-				jsonlinks.add(toJsonObject("AviSynth MT", "https://forum.doom9.org/showthread.php?t=148782"));
-				jsonlinks.add(toJsonObject("DryIcons", "https://dryicons.com/"));
-				jsonlinks.add(toJsonObject("Jordan Michael Groll's Icons", "https://www.deviantart.com/jrdng"));
-				jsonlinks.add(toJsonObject("SVP", "https://www.svp-team.com/"));
-				jsonlinks.add(toJsonObject("OpenSubtitles.org", "https://www.opensubtitles.org/"));
-				jsonlinks.add(toJsonObject("The Movie Database (TMDB)", "https://www.themoviedb.org"));
-				jsonlinks.add(toJsonObject("UMS Support", "https://support.universalmediaserver.com/"));
-				jsonlinks.add(toJsonObject("UMS Forums", "https://www.universalmediaserver.com/forum/"));
-				jsonResponse.add("links", jsonlinks);
-				Account account = AuthService.getAccountLoggedIn(req);
-				if (account != null && (account.havePermission(Permissions.SETTINGS_VIEW | Permissions.SETTINGS_MODIFY))) {
-					jsonResponse.addProperty("operatingSystem", getOperatingSystem());
-					jsonResponse.addProperty("systemMemorySize", getSystemMemorySize());
-					jsonResponse.addProperty("jvmMemoryMax", getJavaMemoryMax());
-				}
-				WebGuiServletHelper.respond(req, resp, jsonResponse.toString(), 200, "application/json");
-			} else {
-				LOGGER.trace("AboutApiServlet request not available : {}", path);
-				WebGuiServletHelper.respondNotFound(req, resp);
-			}
-		} catch (RuntimeException e) {
-			LOGGER.error("RuntimeException in AboutApiServlet: {}", e.getMessage());
-			WebGuiServletHelper.respondInternalServerError(req, resp);
-		}
-	}
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        try {
+            String path = req.getPathInfo();
+            if ("/".equals(path)) {
+                JsonObject jsonResponse = createAboutJsonResponse(req);
+                WebGuiServletHelper.respond(req, resp, jsonResponse.toString(), SUCCESS_RESPONSE_CODE, JSON_CONTENT_TYPE);
+            } else {
+                LOGGER.trace("AboutApiServlet request not available: {}", path);
+                WebGuiServletHelper.respondNotFound(req, resp);
+            }
+        } catch (RuntimeException e) {
+            LOGGER.error("RuntimeException in AboutApiServlet: {}", e.getMessage());
+            WebGuiServletHelper.respondInternalServerError(req, resp);
+        }
+    }
+
+    private JsonObject createAboutJsonResponse(HttpServletRequest req) {
+        JsonObject jsonResponse = new JsonObject();
+        addBasicProjectInfo(jsonResponse);
+        addProjectLinks(jsonResponse);
+        addUserSpecificInfo(req, jsonResponse);
+        return jsonResponse;
+    }
+
+    private void addBasicProjectInfo(JsonObject jsonResponse) {
+        jsonResponse.addProperty("app", PropertiesUtil.getProjectProperties().get("project.name"));
+        jsonResponse.addProperty("version", PMS.getVersion());
+        addCommitInfo(jsonResponse);
+        jsonResponse.addProperty("website", "https://www.universalmediaserver.com");
+        jsonResponse.addProperty("licence", "GNU General Public License version 2");
+        jsonResponse.addProperty("licenceUrl", "https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt");
+    }
+
+    private void addCommitInfo(JsonObject jsonResponse) {
+        String commitId = PropertiesUtil.getProjectProperties().get(GIT_COMMIT_ID);
+        jsonResponse.addProperty("commit", commitId.substring(0, 9) + " (" + PropertiesUtil.getProjectProperties().get("git.commit.time") + ")");
+        jsonResponse.addProperty("commitUrl", COMMIT_URL_TEMPLATE + commitId);
+    }
+
+    private void addProjectLinks(JsonObject jsonResponse) {
+        JsonArray jsonLinks = new JsonArray();
+        jsonLinks.add(toJsonObject("Crowdin", PMS.CROWDIN_LINK));
+        jsonLinks.add(toJsonObject("FFmpeg", "https://ffmpeg.org/"));
+        jsonLinks.add(toJsonObject("MPlayer", "http://www.mplayerhq.hu"));
+        jsonLinks.add(toJsonObject("MPlayer, MEncoder and InterFrame builds", "https://www.spirton.com"));
+        jsonLinks.add(toJsonObject("MediaInfo", "https://mediaarea.net/en/MediaInfo"));
+        jsonLinks.add(toJsonObject("AviSynth MT", "https://forum.doom9.org/showthread.php?t=148782"));
+        jsonLinks.add(toJsonObject("DryIcons", "https://dryicons.com/"));
+        jsonLinks.add(toJsonObject("Jordan Michael Groll's Icons", "https://www.deviantart.com/jrdng"));
+        jsonLinks.add(toJsonObject("SVP", "https://www.svp-team.com/"));
+        jsonLinks.add(toJsonObject("OpenSubtitles.org", "https://www.opensubtitles.org/"));
+        jsonLinks.add(toJsonObject("The Movie Database (TMDB)", "https://www.themoviedb.org"));
+        jsonLinks.add(toJsonObject("UMS Support", "https://support.universalmediaserver.com/"));
+        jsonLinks.add(toJsonObject("UMS Forums", "https://www.universalmediaserver.com/forum/"));
+
+        jsonResponse.add("links", jsonLinks);
+    }
+
+    private void addUserSpecificInfo(HttpServletRequest req, JsonObject jsonResponse) {
+        Account account = AuthService.getAccountLoggedIn(req);
+        if (account != null && account.havePermission(Permissions.SETTINGS_VIEW | Permissions.SETTINGS_MODIFY)) {
+            jsonResponse.addProperty("operatingSystem", getOperatingSystem());
+            jsonResponse.addProperty("systemMemorySize", getSystemMemorySize());
+            jsonResponse.addProperty("jvmMemoryMax", getJavaMemoryMax());
+        }
+    }
+
 
 	private static JsonObject toJsonObject(String key, String value) {
 		JsonObject result = new JsonObject();

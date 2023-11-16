@@ -103,7 +103,7 @@ public class SettingsApiServlet extends GuiHttpServlet {
 				JsonObject jsonResponse = new JsonObject();
 
 				// immutable data
-				p(jsonResponse);
+				jsonSetup(jsonResponse);
 
 				String configurationAsJsonString = getConfigurationAsJsonString();
 				JsonObject configurationAsJson = JsonParser.parseString(configurationAsJsonString).getAsJsonObject();
@@ -315,7 +315,8 @@ public class SettingsApiServlet extends GuiHttpServlet {
 		return jsonResponse.toString();
 	}
 	
-	public static void p (JsonObject jsonResponse)
+	// A setup function.
+	public static void jsonSetup (JsonObject jsonResponse)
 	{
 		jsonResponse.add("userSettingsDefaults", WEB_SETTINGS_WITH_DEFAULTS);
 		jsonResponse.add("serverEngines", SERVER_ENGINES);
