@@ -589,245 +589,265 @@ public class MediaInfo implements Cloneable {
 				size = inputFile.getSize();
 			}
 
-			ProcessWrapperImpl pw = null;
+
 			boolean ffmpegParsing = true;
 
 			if (type == Format.AUDIO || ext instanceof AudioAsVideo) {
-				ffmpegParsing = false;
-				MediaAudio audio = new MediaAudio();
-
-				if (file != null) {
-					try {
-						AudioFile af;
-						if ("mp2".equalsIgnoreCase(FileUtil.getExtension(file))) {
-							af = AudioFileIO.readAs(file, "mp3");
-						} else {
-							af = AudioFileIO.read(file);
-						}
-						AudioHeader ah = af.getAudioHeader();
-
-						if (ah != null) {
-							int length = ah.getTrackLength();
-							int rate = ah.getSampleRateAsNumber();
-
-							if (ah.getEncodingType() != null && ah.getEncodingType().toLowerCase().contains("flac 24")) {
-								audio.setBitsperSample(24);
-							}
-
-							audio.setSampleFrequency("" + rate);
-							durationSec = (double) length;
-							bitrate = (int) ah.getBitRateAsNumber();
-
-							audio.getAudioProperties().setNumberOfChannels(2); // set default value of channels to 2
-							String channels = ah.getChannels().toLowerCase(Locale.ROOT);
-							if (StringUtils.isNotBlank(channels)) {
-								if (channels.equals("1") || channels.contains("mono")) { // parse value "1" or "Mono"
-									audio.getAudioProperties().setNumberOfChannels(1);
-								} else if (!(channels.equals("2") || channels.equals("0") || channels.contains("stereo"))) {
-									// No need to parse stereo as it's set as default
-									try {
-										audio.getAudioProperties().setNumberOfChannels(Integer.parseInt(channels));
-									} catch (IllegalArgumentException e) {
-										LOGGER.debug("Could not parse number of audio channels from \"{}\"", channels);
-									}
-								}
-							}
-
-							if (StringUtils.isNotBlank(ah.getEncodingType())) {
-								audio.setCodecA(ah.getEncodingType());
-							}
-
-							if (audio.getCodecA() != null && audio.getCodecA().contains("(windows media")) {
-								audio.setCodecA(audio.getCodecA().substring(0, audio.getCodecA().indexOf("(windows media")).trim());
-							}
-						}
-
-						Tag t = af.getTag();
-
-						if (t != null) {
-							if (!t.getArtworkList().isEmpty()) {
-								thumb = DLNAThumbnail.toThumbnail(
-									t.getArtworkList().get(0).getBinaryData(),
-									640,
-									480,
-									ScaleType.MAX,
-									ImageFormat.SOURCE,
-									false
-								);
-							} else if (!CONFIGURATION.getAudioThumbnailMethod().equals(CoverSupplier.NONE)) {
-								thumb = DLNAThumbnail.toThumbnail(
-									CoverUtil.get().getThumbnail(t),
-									640,
-									480,
-									ScaleType.MAX,
-									ImageFormat.SOURCE,
-									false
-								);
-							}
-							if (thumb != null) {
-								thumbready = true;
-							}
-
-							audio = setAudioParams(audio, t);
-
-							String keyyear = extractAudioTagKeyValue(t, FieldKey.YEAR);
-							if (keyyear != null) {
-								if (keyyear.length() > 4) {
-									// Extract just the year, skipping  '-month-day'
-									keyyear = keyyear.substring(0, 4);
-								}
-								if (NumberUtils.isParsable(keyyear)) {
-									audio.setYear(Integer.parseInt(keyyear));
-								}
-							}
-
-							Integer trackNum = extractAudioTagKeyIntegerValue(t, FieldKey.TRACK, 1);
-							audio.setTrack(trackNum);
-						}
-					} catch (CannotReadException e) {
-						if (e.getMessage().startsWith(
-							ErrorMessage.NO_READER_FOR_THIS_FORMAT.getMsg().substring(0, ErrorMessage.NO_READER_FOR_THIS_FORMAT.getMsg().indexOf("{"))
-						)) {
-							LOGGER.debug("No audio tag support for audio file \"{}\"", file.getName());
-						} else {
-							LOGGER.error("Error reading audio tag for \"{}\": {}", file.getName(), e.getMessage());
-							LOGGER.trace("", e);
-						}
-					} catch (IOException | TagException | ReadOnlyFileException | InvalidAudioFrameException | NumberFormatException | KeyNotFoundException e) {
-						LOGGER.debug("Error parsing audio file tag for \"{}\": {}", file.getName(), e.getMessage());
-						LOGGER.trace("", e);
-						ffmpegParsing = false;
-					}
-
-					// Set container for formats that the normal parsing fails to do from Format
-					if (StringUtils.isBlank(container) && ext != null && ext.getIdentifier() != null) {
-						switch (ext.getIdentifier()) {
-							case ADPCM -> audio.setCodecA(FormatConfiguration.ADPCM);
-							case DSF -> audio.setCodecA(FormatConfiguration.DSF);
-							case DFF -> audio.setCodecA(FormatConfiguration.DFF);
-							default -> {
-								//nothing to do
-							}
-						}
-					}
-
-					if (StringUtils.isBlank(audio.getSongname())) {
-						audio.setSongname(file.getName());
-					}
-
-					if (!ffmpegParsing) {
-						audioTracks.add(audio);
-					}
-				}
-				if (StringUtils.isBlank(container)) {
-					container = audio.getCodecA();
-				}
+				parseAudio(file, ffmpegParsing, ext);
 			}
 
 			if (type == Format.IMAGE && file != null) {
-				try {
-					ffmpegParsing = false;
-					ImagesUtil.parseImage(file, this);
-					imageCount++;
-				} catch (IOException e) {
-					LOGGER.debug("Error parsing image \"{}\", switching to FFmpeg: {}", file.getAbsolutePath(), e.getMessage());
-					LOGGER.trace("", e);
-					ffmpegParsing = true;
-				}
+				parseImage(file, ffmpegParsing);
 			}
 
 			if (ffmpegParsing) {
-				if ((type != Format.VIDEO || !CONFIGURATION.isUseMplayerForVideoThumbs())) {
-					pw = getFFmpegThumbnail(inputFile, resume);
-				}
-
-				String input = "-";
-
-				if (file != null) {
-					input = ProcessUtil.getShortFileNameIfWideChars(file.getAbsolutePath());
-				}
-
-				synchronized (ffmpegFailureLock) {
-					if (pw != null && !ffmpegFailure) {
-						parseFFmpegInfo(pw.getResults(), input);
-					}
-				}
-
-				if (
-					container != null &&
-					file != null &&
-					container.equals("mpegts") &&
-					isH264() &&
-					getDurationInSeconds() == 0
-				) {
-					// Parse the duration
-					try {
-						int length = MpegUtil.getDurationFromMpeg(file);
-						if (length > 0) {
-							durationSec = (double) length;
-						}
-					} catch (IOException e) {
-						LOGGER.trace("Error retrieving length: " + e.getMessage());
-					}
-				}
-
-				if (CONFIGURATION.isUseMplayerForVideoThumbs() && type == Format.VIDEO) {
-					try {
-						getMplayerThumbnail(inputFile, resume);
-						String frameName = "" + inputFile.hashCode();
-						frameName = CONFIGURATION.getTempFolder() + "/mplayer_thumbs/" + frameName + "00000001/00000001.jpg";
-						frameName = frameName.replace(',', '_');
-						File jpg = new File(frameName);
-
-						if (jpg.exists()) {
-							try (InputStream is = new FileInputStream(jpg)) {
-								int sz = is.available();
-
-								if (sz > 0) {
-									byte[] bytes = new byte[sz];
-									is.read(bytes);
-									thumb = DLNAThumbnail.toThumbnail(
-										bytes,
-										640,
-										480,
-										ScaleType.MAX,
-										ImageFormat.SOURCE,
-										false
-									);
-									thumbready = true;
-								}
-							}
-
-							if (!jpg.delete()) {
-								jpg.deleteOnExit();
-							}
-
-							// Try and retry
-							if (!jpg.getParentFile().delete() && !jpg.getParentFile().delete()) {
-								LOGGER.debug("Failed to delete \"" + jpg.getParentFile().getAbsolutePath() + "\"");
-							}
-						}
-					} catch (IOException e) {
-						LOGGER.debug("Caught exception", e);
-					}
-				}
-
-				if (type == Format.VIDEO && pw != null && thumb == null && pw.getOutputByteArray() != null) {
-					byte[] bytes = pw.getOutputByteArray().toByteArray();
-					if (bytes != null && bytes.length > 0) {
-						try {
-							thumb = DLNAThumbnail.toThumbnail(bytes);
-						} catch (IOException e) {
-							LOGGER.debug("Error while decoding thumbnail: " + e.getMessage());
-							LOGGER.trace("", e);
-						}
-						thumbready = true;
-					}
-				}
+				doFfmpegParsing(inputFile, file, type, resume);
 			}
 
 			postParse(type, inputFile);
 			mediaparsed = true;
+		}
+	}
+
+	private void parseImage(File file, boolean ffmpegParsing){
+		try {
+			ffmpegParsing = false;
+			ImagesUtil.parseImage(file, this);
+			imageCount++;
+		} catch (IOException e) {
+			LOGGER.debug("Error parsing image \"{}\", switching to FFmpeg: {}", file.getAbsolutePath(), e.getMessage());
+			LOGGER.trace("", e);
+			ffmpegParsing = true;
+		}
+	}
+	private void doFfmpegParsing(InputFile inputFile, File file, int type, boolean resume){
+		ProcessWrapperImpl pw = null;
+		if ((type != Format.VIDEO || !CONFIGURATION.isUseMplayerForVideoThumbs())) {
+			pw = getFFmpegThumbnail(inputFile, resume);
+		}
+
+		String input = "-";
+
+		if (file != null) {
+			input = ProcessUtil.getShortFileNameIfWideChars(file.getAbsolutePath());
+		}
+
+		synchronized (ffmpegFailureLock) {
+			if (pw != null && !ffmpegFailure) {
+				parseFFmpegInfo(pw.getResults(), input);
+			}
+		}
+
+		if (
+				container != null &&
+						file != null &&
+						container.equals("mpegts") &&
+						isH264() &&
+						getDurationInSeconds() == 0
+		) {
+			// Parse the duration
+			try {
+				int length = MpegUtil.getDurationFromMpeg(file);
+				if (length > 0) {
+					durationSec = (double) length;
+				}
+			} catch (IOException e) {
+				LOGGER.trace("Error retrieving length: " + e.getMessage());
+			}
+		}
+
+		if (CONFIGURATION.isUseMplayerForVideoThumbs() && type == Format.VIDEO) {
+			parseJpg(inputFile, resume);
+		}
+
+		getThumbnail(type, pw);
+	}
+
+	private void parseAudio(File file, boolean ffmpegParsing, Format ext){
+		ffmpegParsing = false;
+		MediaAudio audio = new MediaAudio();
+
+		if (file != null) {
+			try {
+				AudioFile af;
+				if ("mp2".equalsIgnoreCase(FileUtil.getExtension(file))) {
+					af = AudioFileIO.readAs(file, "mp3");
+				} else {
+					af = AudioFileIO.read(file);
+				}
+				AudioHeader ah = af.getAudioHeader();
+
+				if (ah != null) {
+					int length = ah.getTrackLength();
+					int rate = ah.getSampleRateAsNumber();
+
+					if (ah.getEncodingType() != null && ah.getEncodingType().toLowerCase().contains("flac 24")) {
+						audio.setBitsperSample(24);
+					}
+
+					audio.setSampleFrequency("" + rate);
+					durationSec = (double) length;
+					bitrate = (int) ah.getBitRateAsNumber();
+
+					audio.getAudioProperties().setNumberOfChannels(2); // set default value of channels to 2
+					String channels = ah.getChannels().toLowerCase(Locale.ROOT);
+					if (StringUtils.isNotBlank(channels)) {
+						if (channels.equals("1") || channels.contains("mono")) { // parse value "1" or "Mono"
+							audio.getAudioProperties().setNumberOfChannels(1);
+						} else if (!(channels.equals("2") || channels.equals("0") || channels.contains("stereo"))) {
+							// No need to parse stereo as it's set as default
+							try {
+								audio.getAudioProperties().setNumberOfChannels(Integer.parseInt(channels));
+							} catch (IllegalArgumentException e) {
+								LOGGER.debug("Could not parse number of audio channels from \"{}\"", channels);
+							}
+						}
+					}
+
+					if (StringUtils.isNotBlank(ah.getEncodingType())) {
+						audio.setCodecA(ah.getEncodingType());
+					}
+
+					if (audio.getCodecA() != null && audio.getCodecA().contains("(windows media")) {
+						audio.setCodecA(audio.getCodecA().substring(0, audio.getCodecA().indexOf("(windows media")).trim());
+					}
+				}
+
+				Tag t = af.getTag();
+
+				if (t != null) {
+					if (!t.getArtworkList().isEmpty()) {
+						thumb = DLNAThumbnail.toThumbnail(
+								t.getArtworkList().get(0).getBinaryData(),
+								640,
+								480,
+								ScaleType.MAX,
+								ImageFormat.SOURCE,
+								false
+						);
+					} else if (!CONFIGURATION.getAudioThumbnailMethod().equals(CoverSupplier.NONE)) {
+						thumb = DLNAThumbnail.toThumbnail(
+								CoverUtil.get().getThumbnail(t),
+								640,
+								480,
+								ScaleType.MAX,
+								ImageFormat.SOURCE,
+								false
+						);
+					}
+					if (thumb != null) {
+						thumbready = true;
+					}
+
+					audio = setAudioParams(audio, t);
+
+					String keyyear = extractAudioTagKeyValue(t, FieldKey.YEAR);
+					if (keyyear != null) {
+						if (keyyear.length() > 4) {
+							// Extract just the year, skipping  '-month-day'
+							keyyear = keyyear.substring(0, 4);
+						}
+						if (NumberUtils.isParsable(keyyear)) {
+							audio.setYear(Integer.parseInt(keyyear));
+						}
+					}
+
+					Integer trackNum = extractAudioTagKeyIntegerValue(t, FieldKey.TRACK, 1);
+					audio.setTrack(trackNum);
+				}
+			} catch (CannotReadException e) {
+				if (e.getMessage().startsWith(
+						ErrorMessage.NO_READER_FOR_THIS_FORMAT.getMsg().substring(0, ErrorMessage.NO_READER_FOR_THIS_FORMAT.getMsg().indexOf("{"))
+				)) {
+					LOGGER.debug("No audio tag support for audio file \"{}\"", file.getName());
+				} else {
+					LOGGER.error("Error reading audio tag for \"{}\": {}", file.getName(), e.getMessage());
+					LOGGER.trace("", e);
+				}
+			} catch (IOException | TagException | ReadOnlyFileException | InvalidAudioFrameException | NumberFormatException | KeyNotFoundException e) {
+				LOGGER.debug("Error parsing audio file tag for \"{}\": {}", file.getName(), e.getMessage());
+				LOGGER.trace("", e);
+				ffmpegParsing = false;
+			}
+
+			// Set container for formats that the normal parsing fails to do from Format
+			if (StringUtils.isBlank(container) && ext != null && ext.getIdentifier() != null) {
+				switch (ext.getIdentifier()) {
+					case ADPCM -> audio.setCodecA(FormatConfiguration.ADPCM);
+					case DSF -> audio.setCodecA(FormatConfiguration.DSF);
+					case DFF -> audio.setCodecA(FormatConfiguration.DFF);
+					default -> {
+						//nothing to do
+					}
+				}
+			}
+
+			if (StringUtils.isBlank(audio.getSongname())) {
+				audio.setSongname(file.getName());
+			}
+
+			if (!ffmpegParsing) {
+				audioTracks.add(audio);
+			}
+		}
+		if (StringUtils.isBlank(container)) {
+			container = audio.getCodecA();
+		}
+	}
+
+	private void parseJpg(InputFile inputFile, boolean resume){
+		try {
+			getMplayerThumbnail(inputFile, resume);
+			String frameName = "" + inputFile.hashCode();
+			frameName = CONFIGURATION.getTempFolder() + "/mplayer_thumbs/" + frameName + "00000001/00000001.jpg";
+			frameName = frameName.replace(',', '_');
+			File jpg = new File(frameName);
+
+			if (jpg.exists()) {
+				try (InputStream is = new FileInputStream(jpg)) {
+					int sz = is.available();
+
+					if (sz > 0) {
+						byte[] bytes = new byte[sz];
+						is.read(bytes);
+						thumb = DLNAThumbnail.toThumbnail(
+								bytes,
+								640,
+								480,
+								ScaleType.MAX,
+								ImageFormat.SOURCE,
+								false
+						);
+						thumbready = true;
+					}
+				}
+
+				if (!jpg.delete()) {
+					jpg.deleteOnExit();
+				}
+
+				// Try and retry
+				if (!jpg.getParentFile().delete() && !jpg.getParentFile().delete()) {
+					LOGGER.debug("Failed to delete \"" + jpg.getParentFile().getAbsolutePath() + "\"");
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.debug("Caught exception", e);
+		}
+	}
+
+	private void getThumbnail(int type, ProcessWrapperImpl pw){
+		if (type == Format.VIDEO && pw != null && thumb == null && pw.getOutputByteArray() != null) {
+			byte[] bytes = pw.getOutputByteArray().toByteArray();
+			if (bytes != null && bytes.length > 0) {
+				try {
+					thumb = DLNAThumbnail.toThumbnail(bytes);
+				} catch (IOException e) {
+					LOGGER.debug("Error while decoding thumbnail: " + e.getMessage());
+					LOGGER.trace("", e);
+				}
+				thumbready = true;
+			}
 		}
 	}
 
