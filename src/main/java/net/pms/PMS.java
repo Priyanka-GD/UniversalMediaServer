@@ -495,7 +495,7 @@ public class PMS {
 		logIo();
 
 		// Wizard
-<<<<<<< Updated upstream
+		// Updated upstream;
 		if (umsConfiguration.isRunWizard() && !isHeadless() && !isRunningTests()) {
 			// Hide splash screen
 			if (splash != null) {
@@ -510,9 +510,9 @@ public class PMS {
 				splash.setVisible(true);
 			}
 		}
-=======
+
 		runWizard(splash);
->>>>>>> Stashed changes
+		// Stashed changes;
 
 		globalRepo = new GlobalIdRepo();
 		LOGGER.trace("Initialized globalRepo");
