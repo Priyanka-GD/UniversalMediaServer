@@ -72,24 +72,42 @@ public final class UserTableGroups extends UserTable {
 	 */
 	protected static void checkTable(final Connection connection) throws SQLException {
 		if (tableExists(connection, TABLE_NAME)) {
-			Integer version = UserTableTablesVersions.getTableVersion(connection, TABLE_NAME);
-			if (version != null) {
-				if (version < TABLE_VERSION) {
-					upgradeTable(connection, version);
-				} else if (version > TABLE_VERSION) {
-					LOGGER.warn(LOG_TABLE_NEWER_VERSION_DELETEDB, DATABASE_NAME, TABLE_NAME, DATABASE.getDatabaseFilename());
-				}
-			} else {
-				LOGGER.warn(LOG_TABLE_UNKNOWN_VERSION_RECREATE, DATABASE_NAME, TABLE_NAME);
-				dropTable(connection, TABLE_NAME);
-				createTable(connection);
-				UserTableTablesVersions.setTableVersion(connection, TABLE_NAME, TABLE_VERSION);
-			}
+			handleExistingTable(connection);
 		} else {
-			createTable(connection);
-			UserTableTablesVersions.setTableVersion(connection, TABLE_NAME, TABLE_VERSION);
+			createAndSetTable(connection);
 		}
 	}
+	
+	private static void handleExistingTable(Connection connection) throws SQLException {
+		Integer version = UserTableTablesVersions.getTableVersion(connection, TABLE_NAME);
+	
+		if (version != null) {
+			handleTableVersion(connection, version);
+		} else {
+			handleUnknownTableVersion(connection);
+		}
+	}
+	
+	private static void handleTableVersion(Connection connection, int version) throws SQLException {
+		if (version < TABLE_VERSION) {
+			upgradeTable(connection, version);
+		} else if (version > TABLE_VERSION) {
+			LOGGER.warn(LOG_TABLE_NEWER_VERSION_DELETEDB, DATABASE_NAME, TABLE_NAME, DATABASE.getDatabaseFilename());
+		}
+	}
+	
+	private static void handleUnknownTableVersion(Connection connection) throws SQLException {
+		LOGGER.warn(LOG_TABLE_UNKNOWN_VERSION_RECREATE, DATABASE_NAME, TABLE_NAME);
+		dropTable(connection, TABLE_NAME);
+		createTable(connection);
+		UserTableTablesVersions.setTableVersion(connection, TABLE_NAME, TABLE_VERSION);
+	}
+	
+	private static void createAndSetTable(Connection connection) throws SQLException {
+		createTable(connection);
+		UserTableTablesVersions.setTableVersion(connection, TABLE_NAME, TABLE_VERSION);
+	}
+	
 
 	/**
 	 * This method <strong>MUST</strong> be updated if the table definition are
