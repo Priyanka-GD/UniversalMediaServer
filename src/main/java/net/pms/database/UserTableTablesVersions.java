@@ -83,17 +83,30 @@ public class UserTableTablesVersions extends UserTable {
 		try (PreparedStatement statement = connection.prepareStatement(SQL_GET_VERSION_BY_TABLE_NAME)) {
 			statement.setString(1, tableName);
 			try (ResultSet result = statement.executeQuery()) {
-				if (result.next()) {
-					if (LOGGER.isTraceEnabled()) {
-						LOGGER.trace("Table version for database table \"{}\" is {}", tableName, result.getInt(1));
-					}
-					return result.getInt(1);
-				} else {
-					LOGGER.trace("Table version for database table \"{}\" not found", tableName);
-					return null;
-				}
+				return processResultSet(result, tableName);
 			}
 		}
+	}
+	
+	private static Integer processResultSet(ResultSet result, String tableName) throws SQLException {
+		if (result.next()) {
+			int tableVersion = result.getInt(1);
+			logTableVersion(tableName, tableVersion);
+			return tableVersion;
+		} else {
+			logTableVersionNotFound(tableName);
+			return null;
+		}
+	}
+	
+	private static void logTableVersion(String tableName, int tableVersion) {
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("Table version for database table \"{}\" is {}", tableName, tableVersion);
+		}
+	}
+	
+	private static void logTableVersionNotFound(String tableName) {
+		LOGGER.trace("Table version for database table \"{}\" not found", tableName);
 	}
 
 	/**
@@ -111,20 +124,30 @@ public class UserTableTablesVersions extends UserTable {
 			statement.setString(1, tableName);
 			try (ResultSet result = statement.executeQuery()) {
 				if (!result.next()) {
-					LOGGER.trace("Setting table version for database table \"{}\" to {}", tableName, version);
-					result.moveToInsertRow();
-					result.updateString(COL_TABLE_NAME, tableName);
-					result.updateInt(COL_TABLE_VERSION, version);
-					result.insertRow();
-				} else if (result.getInt(COL_TABLE_VERSION) == version) {
-					LOGGER.trace("Table version for database table \"{}\" is already {}, aborting set", tableName, version);
+					handleInsertCase(result, tableName, version);
 				} else {
-					int currentVersion = result.getInt(COL_TABLE_VERSION);
-					LOGGER.trace("Updating table version for database table \"{}\" from {} to {}", tableName, currentVersion, version);
-					result.updateInt(COL_TABLE_VERSION, version);
-					result.updateRow();
+					handleUpdateCase(result, tableName, version);
 				}
 			}
+		}
+	}
+	
+	private static void handleInsertCase(ResultSet result, String tableName, int version) throws SQLException {
+		LOGGER.trace("Setting table version for database table \"{}\" to {}", tableName, version);
+		result.moveToInsertRow();
+		result.updateString(COL_TABLE_NAME, tableName);
+		result.updateInt(COL_TABLE_VERSION, version);
+		result.insertRow();
+	}
+	
+	private static void handleUpdateCase(ResultSet result, String tableName, int version) throws SQLException {
+		int currentVersion = result.getInt(COL_TABLE_VERSION);
+		if (currentVersion == version) {
+			LOGGER.trace("Table version for database table \"{}\" is already {}, aborting set", tableName, version);
+		} else {
+			LOGGER.trace("Updating table version for database table \"{}\" from {} to {}", tableName, currentVersion, version);
+			result.updateInt(COL_TABLE_VERSION, version);
+			result.updateRow();
 		}
 	}
 
