@@ -114,35 +114,50 @@ public final class UserTableUsers extends UserTable {
 	 */
 	private static void upgradeTable(final Connection connection, final int currentVersion) throws SQLException {
 		LOGGER.info(LOG_UPGRADING_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, TABLE_VERSION);
+	
 		for (int version = currentVersion; version < TABLE_VERSION; version++) {
 			LOGGER.trace(LOG_UPGRADING_TABLE, DATABASE_NAME, TABLE_NAME, version, version + 1);
-			switch (version) {
-				case 1 -> {
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_DISPLAY_NAME + VARCHAR_255);
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_GROUP_ID + INTEGER + DEFAULT_0);
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_LAST_LOGIN_TIME + BIGINT + DEFAULT_0);
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_LOGIN_FAIL_TIME + BIGINT + DEFAULT_0);
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_LOGIN_FAIL_COUNT + INTEGER + DEFAULT_0);
-					executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_DISPLAY_NAME + EQUAL + "'" + AccountService.DEFAULT_ADMIN_GROUP + "'" + WHERE + COL_ID + EQUAL + "0");
-					executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_GROUP_ID + EQUAL + "1" + WHERE + COL_ID + EQUAL + "1");
-					LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
-				}
-				case 2 -> {
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ALTER_COLUMN + IF_EXISTS + COL_GROUP_ID + SET + DEFAULT_0);
-					executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_GROUP_ID + EQUAL + "1" + WHERE + COL_ID + EQUAL + "1");
-					LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
-				}
-				case 3 -> {
-					executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ALTER_COLUMN + IF_EXISTS + "NAME" + RENAME_TO + COL_DISPLAY_NAME);
-					executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_DISPLAY_NAME + EQUAL + "'" + AccountService.DEFAULT_ADMIN_GROUP + "'" + WHERE + COL_ID + EQUAL + "1");
-					LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
-				}
-				default -> throw new IllegalStateException(
-					getMessage(LOG_UPGRADING_TABLE_MISSING, DATABASE_NAME, TABLE_NAME, version, TABLE_VERSION)
-				);
-			}
+			upgradeTableByVersion(connection, currentVersion, version);
+			LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
 		}
+	
 		UserTableTablesVersions.setTableVersion(connection, TABLE_NAME, TABLE_VERSION);
+	}
+	
+	private static void upgradeTableByVersion(Connection connection, int currentVersion, int version) throws SQLException {
+		switch (version) {
+			case 1 -> upgradeToVersion1(connection, currentVersion, version);
+			case 2 -> upgradeToVersion2(connection, currentVersion, version);
+			case 3 -> upgradeToVersion3(connection, currentVersion, version);
+			default -> handleMissingUpgradeVersion(version);
+		}
+	}
+	
+	private static void upgradeToVersion1(Connection connection, int currentVersion, int version) throws SQLException {
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_DISPLAY_NAME + VARCHAR_255);
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_GROUP_ID + INTEGER + DEFAULT_0);
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_LAST_LOGIN_TIME + BIGINT + DEFAULT_0);
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_LOGIN_FAIL_TIME + BIGINT + DEFAULT_0);
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ADD + IF_NOT_EXISTS + COL_LOGIN_FAIL_COUNT + INTEGER + DEFAULT_0);
+		executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_DISPLAY_NAME + EQUAL + "'" + AccountService.DEFAULT_ADMIN_GROUP + "'" + WHERE + COL_ID + EQUAL + "0");
+		executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_GROUP_ID + EQUAL + "1" + WHERE + COL_ID + EQUAL + "1");
+		LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
+	}
+	
+	private static void upgradeToVersion2(Connection connection, int currentVersion, int version) throws SQLException {
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ALTER_COLUMN + IF_EXISTS + COL_GROUP_ID + SET + DEFAULT_0);
+		executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_GROUP_ID + EQUAL + "1" + WHERE + COL_ID + EQUAL + "1");
+		LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
+	}
+	
+	private static void upgradeToVersion3(Connection connection, int currentVersion, int version) throws SQLException {
+		executeUpdate(connection, ALTER_TABLE + TABLE_NAME + ALTER_COLUMN + IF_EXISTS + "NAME" + RENAME_TO + COL_DISPLAY_NAME);
+		executeUpdate(connection, UPDATE + TABLE_NAME + SET + COL_DISPLAY_NAME + EQUAL + "'" + AccountService.DEFAULT_ADMIN_GROUP + "'" + WHERE + COL_ID + EQUAL + "1");
+		LOGGER.trace(LOG_UPGRADED_TABLE, DATABASE_NAME, TABLE_NAME, currentVersion, version);
+	}
+	
+	private static void handleMissingUpgradeVersion(int version) {
+		throw new IllegalStateException(getMessage(LOG_UPGRADING_TABLE_MISSING, DATABASE_NAME, TABLE_NAME, version, TABLE_VERSION));
 	}
 
 	private static void createTable(final Connection connection) throws SQLException {
