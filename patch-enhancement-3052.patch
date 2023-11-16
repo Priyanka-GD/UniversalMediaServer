@@ -1,0 +1,28 @@
+diff --git a/src/main/java/net/pms/dlna/DLNAResource.java b/src/main/java/net/pms/dlna/DLNAResource.java
+index 9c5118e5e..4d753a8a3 100644
+--- a/src/main/java/net/pms/dlna/DLNAResource.java
++++ b/src/main/java/net/pms/dlna/DLNAResource.java
+@@ -727,19 +727,20 @@ public abstract class DLNAResource extends HTTPResource implements Cloneable, Ru
+ 						}
+ 					}
+ 				}
+-
+ 				if (isNew) {
+ 					addChildInternal(child, isAddGlobally);
++				} else {
++					LOGGER.trace("Details on media being imported :" + child);
+ 				}
+-
+ 				if (resumeRes != null) {
+ 					resumeRes.setDefaultRenderer(child.getDefaultRenderer());
+ 					addChildInternal(resumeRes);
++				} else {
++					LOGGER.trace("DLNAResource is null :" + resumeRes);
+ 				}
+ 			}
+ 		} catch (Throwable t) {
+ 			LOGGER.debug("Error adding child {}: {}", child.getName(), t);
+-
+ 			child.parent = null;
+ 			children.remove(child);
+ 		}
