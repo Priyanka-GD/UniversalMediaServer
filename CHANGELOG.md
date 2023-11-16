@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unofficial] (20213-11-16)
+
+### Refactors
+- Extracted functions in PMS.java
+- Extracted functions in MediaInfo.java
+- Extracted class from PMS.java
+- Extracted class from MediaInfo.java
+- Removed instance of from GuiManager.java
+- Also affects IGui.java, WenGuiServer.java, LooksFrame.java
+- Other cleanup
+
 ## [13.8.0](https://github.com/UniversalMediaServer/UniversalMediaServer/compare/13.7.0...13.8.0) (2023-10-21)
 
 ### General
