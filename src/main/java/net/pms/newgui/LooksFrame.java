@@ -608,6 +608,11 @@ public class LooksFrame extends JFrame implements IGui, Observer {
 	}
 
 	@Override
+	public ThisType getThisType() {
+		return ThisType.LOOKSFEEL;
+	}
+
+	@Override
 	public void appendLog(final String msg) {
 		SwingUtilities.invokeLater(() -> {
 			tt.append(msg);

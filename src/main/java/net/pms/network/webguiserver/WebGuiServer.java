@@ -38,6 +38,11 @@ public abstract class WebGuiServer implements IGui {
 	public abstract void stop();
 
 	@Override
+	public ThisType getThisType() {
+		return ThisType.GUISERVER;
+	}
+
+	@Override
 	public void appendLog(String msg) {
 		SseApiServlet.appendLog(msg);
 	}

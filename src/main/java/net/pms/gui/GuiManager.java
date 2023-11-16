@@ -51,11 +51,11 @@ public class GuiManager {
 
 	public static void addGui(IGui gui) {
 		if (gui != null) {
-			if (gui instanceof LooksFrame) {
+			if (gui.getThisType() == IGui.ThisType.LOOKSFEEL) {
 				// fill the log
 				dumpCurrentLog(gui);
 				swingFrame = gui;
-			} else if (gui instanceof WebGuiServer) {
+			} else if (gui.getThisType() == IGui.ThisType.GUISERVER) {
 				webGui = gui;
 			} else {
 				return;

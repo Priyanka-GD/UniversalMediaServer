@@ -19,6 +19,11 @@ package net.pms.gui;
 import net.pms.renderers.Renderer;
 
 public interface IGui {
+	enum ThisType{
+		LOOKSFEEL,
+		GUISERVER
+	}
+	public ThisType getThisType();
 	public void appendLog(String msg);
 	public void setCurrentBitrate(int sizeinMb);
 	public void setPeakBitrate(int sizeinMb);
