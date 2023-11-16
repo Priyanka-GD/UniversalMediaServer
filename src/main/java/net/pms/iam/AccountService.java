@@ -107,30 +107,60 @@ public class AccountService {
 	}
 
 	public static Account getAccountByUsername(final Connection connection, final String username) {
-		Account account = new Account();
-		account.setUser(UserTableUsers.getUserByUsername(connection, username));
-		if (account.getUser() == null) {
+		// Retrieve user information from the database
+		User user = UserTableUsers.getUserByUsername(connection, username);
+	
+		// If the user doesn't exist, return null
+		if (user == null) {
 			return null;
 		}
-		if (!USERS.containsKey(account.getUser().getId())) {
-			USERS.put(account.getUser().getId(), account.getUser());
-		}
-		int groupId = account.getUser().getGroupId();
-		if (GROUPS.containsKey(groupId)) {
-			account.setGroup(GROUPS.get(groupId));
-		} else {
-			Group group = UserTableGroups.getGroupById(connection, groupId);
-			//here, group id may have falled back to no group (0)
-			GROUPS.put(group.getId(), group);
-			account.setGroup(group);
-			if (account.getUser().getGroupId() != account.getGroup().getId() && account.getGroup().getId() == 0) {
-				LOGGER.info("User '{}' refer to an unknown group that fall back to no group.", account.getUser().getUsername());
-				//update the user groupId to prevent message flood
-				account.getUser().setGroupId(account.getGroup().getId());
-			}
-		}
+	
+		// If the user is not in the USERS map, add them
+		addUserToMap(user);
+	
+		// Retrieve the user's group information
+		Group group = getGroupForUser(connection, user);
+	
+		// Set the user and group in the account
+		Account account = new Account();
+		account.setUser(user);
+		account.setGroup(group);
+	
+		// Handle the case where the group ID falls back to 0
+		handleFallbackGroup(account);
+	
 		return account;
 	}
+	
+	private static void addUserToMap(User user) {
+		if (!USERS.containsKey(user.getId())) {
+			USERS.put(user.getId(), user);
+		}
+	}
+	
+	private static Group getGroupForUser(Connection connection, User user) {
+		int groupId = user.getGroupId();
+		if (GROUPS.containsKey(groupId)) {
+			return GROUPS.get(groupId);
+		} else {
+			Group group = UserTableGroups.getGroupById(connection, groupId);
+			// If group ID falls back to no group (0), update the map
+			if (group.getId() == groupId) {
+				GROUPS.put(group.getId(), group);
+			}
+			return group;
+		}
+	}
+	
+	private static void handleFallbackGroup(Account account) {
+		int userGroupId = account.getUser().getGroupId();
+		if (userGroupId != account.getGroup().getId() && account.getGroup().getId() == 0) {
+			LOGGER.info("User '{}' refers to an unknown group that falls back to no group.", account.getUser().getUsername());
+			// Update the user's group ID to prevent message flood
+			account.getUser().setGroupId(account.getGroup().getId());
+		}
+	}
+	
 
 	public static void setUserLogged(final Connection connection, final User user) {
 		LOGGER.info("User {} logged", user.getUsername());
