@@ -43,131 +43,166 @@ import org.slf4j.LoggerFactory;
 public class RenderersApiServlet extends GuiHttpServlet {
 	private static final Logger LOGGER = LoggerFactory.getLogger(RenderersApiServlet.class);
 
-	@Override
-	protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-		try {
-			var path = req.getPathInfo();
-			if (path.equals("/")) {
-				JsonObject jsonResponse = new JsonObject();
-				jsonResponse.add("renderers", RendererItem.getRenderersAsJsonArray());
-				jsonResponse.addProperty("renderersBlockedByDefault", RendererFilter.getBlockedByDefault());
-				jsonResponse.add("networkDevices", NetworkDeviceFilter.getNetworkDevicesAsJsonArray());
-				jsonResponse.addProperty("networkDevicesBlockedByDefault", NetworkDeviceFilter.getBlockedByDefault());
-				jsonResponse.addProperty("currentTime", System.currentTimeMillis());
-				WebGuiServletHelper.respond(req, resp, jsonResponse.toString(), 200, "application/json");
-			} else if (path.startsWith("/icon/")) {
-				RendererItem renderer = null;
-				String[] splitted = path.split("/");
-				if (splitted.length == 4) {
-					String rId = splitted[2];
-					try {
-						renderer = RendererItem.getRenderer(Integer.parseInt(rId));
-					} catch (NumberFormatException e) {
-					}
-				}
-				if (renderer == null || !getRendererIcon(req, resp, renderer.getIcon())) {
-					WebGuiServletHelper.respondNotFound(req, resp);
-				}
-			} else {
-				LOGGER.trace("RenderersApiServlet request not available : {}", path);
-				WebGuiServletHelper.respondNotFound(req, resp);
-			}
-		} catch (RuntimeException e) {
-			LOGGER.error("RuntimeException in RenderersApiServlet: {}", e.getMessage());
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        try {
+            var path = req.getPathInfo();
+            if (path.equals("/")) {
+                handleRootPathRequest(req, resp);
+            } else if (path.startsWith("/icon/")) {
+                handleIconRequest(req, resp, path);
+            } else {
+                LOGGER.trace("RenderersApiServlet request not available : {}", path);
+                WebGuiServletHelper.respondNotFound(req, resp);
+            }
+        } catch (RuntimeException e) {
+        	LOGGER.error("RuntimeException in RenderersApiServlet: {}", e.getMessage());
 			WebGuiServletHelper.respondInternalServerError(req, resp);
-		}
-	}
+        }
+    }
 
-	@Override
-	protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-		try {
-			Account account = AuthService.getAccountLoggedIn(req);
-			if (account == null) {
-				WebGuiServletHelper.respondForbidden(req, resp);
-				return;
-			}
-			var path = req.getPathInfo();
-			switch (path) {
-				case "/infos" -> {
-					JsonObject post = WebGuiServletHelper.getJsonObjectFromBody(req);
-					JsonObject rendererInfos = getRendererInfos(post);
-					if (rendererInfos == null) {
-						WebGuiServletHelper.respondBadRequest(req, resp);
-						return;
-					}
-					WebGuiServletHelper.respond(req, resp, rendererInfos.toString(), 200, "application/json");
-				}
-				case "/control" -> {
-					if (!account.havePermission(Permissions.DEVICES_CONTROL)) {
-						WebGuiServletHelper.respondForbidden(req, resp);
-						return;
-					}
-					JsonObject post = WebGuiServletHelper.getJsonObjectFromBody(req);
-					if (RendererItem.remoteControlRenderer(post)) {
-						WebGuiServletHelper.respond(req, resp, "{}", 200, "application/json");
-					} else {
-						WebGuiServletHelper.respondBadRequest(req, resp);
-					}
-				}
-				case "/browse" -> {
-					if (!account.havePermission(Permissions.DEVICES_CONTROL)) {
-						WebGuiServletHelper.respondForbidden(req, resp);
-						return;
-					}
-					JsonObject post = WebGuiServletHelper.getJsonObjectFromBody(req);
-					JsonObject datas = RendererItem.getRemoteControlBrowse(post);
-					if (datas != null) {
-						WebGuiServletHelper.respond(req, resp, datas.toString(), 200, "application/json");
-					} else {
-						WebGuiServletHelper.respondBadRequest(req, resp);
-					}
-				}
-				case "/renderers" -> {
-					if (!account.havePermission(Permissions.SETTINGS_MODIFY)) {
-						WebGuiServletHelper.respondForbidden(req, resp);
-						return;
-					}
-					JsonObject data = WebGuiServletHelper.getJsonObjectFromBody(req);
-					if (data != null && data.has("rule")) {
-						String uuid = data.get("rule").getAsString();
-						Boolean isAllowed = data.get("isAllowed").getAsBoolean();
-						if ("DEFAULT".equals(uuid)) {
-							RendererFilter.setBlockedByDefault(!isAllowed);
-						} else {
-							RendererFilter.setAllowed(uuid, isAllowed);
-						}
-					}
-					WebGuiServletHelper.respond(req, resp, "{}", 200, "application/json");
-				}
-				case "/devices" -> {
-					if (!account.havePermission(Permissions.SETTINGS_MODIFY)) {
-						WebGuiServletHelper.respondForbidden(req, resp);
-						return;
-					}
-					JsonObject data = WebGuiServletHelper.getJsonObjectFromBody(req);
-					if (data != null && data.has("rule")) {
-						String rule = data.get("rule").getAsString();
-						Boolean isAllowed = data.get("isAllowed").getAsBoolean();
-						if ("DEFAULT".equals(rule)) {
-							NetworkDeviceFilter.setBlockedByDefault(!isAllowed);
-						} else {
-							NetworkDeviceFilter.setAllowed(rule, isAllowed);
-						}
-						WebGuiServletHelper.respond(req, resp, "{}", 200, "application/json");
-					} else {
-						WebGuiServletHelper.respondBadRequest(req, resp);
-					}
-				}
-				default -> {
-					LOGGER.trace("RenderersApiServlet request not available : {}", path);
-					WebGuiServletHelper.respondNotFound(req, resp);
-				}
-			}
-		} catch (RuntimeException e) {
-			LOGGER.error("RuntimeException in RenderersApiServlet: {}", e.getMessage());
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        try {
+            Account account = AuthService.getAccountLoggedIn(req);
+            if (account == null) {
+                WebGuiServletHelper.respondForbidden(req, resp);
+                return;
+            }
+
+            var path = req.getPathInfo();
+            handlePostRequest(req, resp, account, path);
+        } catch (RuntimeException e) {
+        	LOGGER.error("RuntimeException in RenderersApiServlet: {}", e.getMessage());
 			WebGuiServletHelper.respondInternalServerError(req, resp);
-		}
-	}
+        }
+    }
+
+    private void handleRootPathRequest(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        JsonObject jsonResponse = new JsonObject();
+        jsonResponse.add("renderers", RendererItem.getRenderersAsJsonArray());
+        jsonResponse.addProperty("renderersBlockedByDefault", RendererFilter.getBlockedByDefault());
+        jsonResponse.add("networkDevices", NetworkDeviceFilter.getNetworkDevicesAsJsonArray());
+        jsonResponse.addProperty("networkDevicesBlockedByDefault", NetworkDeviceFilter.getBlockedByDefault());
+        jsonResponse.addProperty("currentTime", System.currentTimeMillis());
+        WebGuiServletHelper.respond(req, resp, jsonResponse.toString(), 200, "application/json");
+    }
+
+    private void handleIconRequest(HttpServletRequest req, HttpServletResponse resp, String path) throws IOException {
+        RendererItem renderer = null;
+        String[] splitted = path.split("/");
+        if (splitted.length == 4) {
+            String rId = splitted[2];
+            try {
+                renderer = RendererItem.getRenderer(Integer.parseInt(rId));
+            } catch (NumberFormatException e) {
+                // Log or handle the NumberFormatException if necessary
+            }
+        }
+        if (renderer == null || !getRendererIcon(req, resp, renderer.getIcon())) {
+            WebGuiServletHelper.respondNotFound(req, resp);
+        }
+    }
+
+    private void handlePostRequest(HttpServletRequest req, HttpServletResponse resp, Account account, String path) throws IOException {
+        JsonObject post = WebGuiServletHelper.getJsonObjectFromBody(req);
+        switch (path) {
+            case "/infos":
+                handleInfosRequest(req, resp, post);
+                break;
+            case "/control":
+                handleControlRequest(req, resp, account, post);
+                break;
+            case "/browse":
+                handleBrowseRequest(req, resp, account, post);
+                break;
+            case "/renderers":
+                handleRenderersRequest(req, resp, account, post);
+                break;
+            case "/devices":
+                handleDevicesRequest(req, resp, account, post);
+                break;
+            default:
+                LOGGER.trace("RenderersApiServlet request not available : {}", path);
+                WebGuiServletHelper.respondNotFound(req, resp);
+                break;
+        }
+    }
+
+    private void handleInfosRequest(HttpServletRequest req, HttpServletResponse resp, JsonObject post) throws IOException {
+        JsonObject rendererInfos = getRendererInfos(post);
+        if (rendererInfos == null) {
+            WebGuiServletHelper.respondBadRequest(req, resp);
+            return;
+        }
+        WebGuiServletHelper.respond(req, resp, rendererInfos.toString(), 200, "application/json");
+    }
+
+
+    private void handleControlRequest(HttpServletRequest req, HttpServletResponse resp, Account account, JsonObject post) throws IOException {
+        if (!account.havePermission(Permissions.DEVICES_CONTROL)) {
+            WebGuiServletHelper.respondForbidden(req, resp);
+            return;
+        }
+        if (RendererItem.remoteControlRenderer(post)) {
+            WebGuiServletHelper.respond(req, resp, "{}", 200, "application/json");
+        } else {
+            WebGuiServletHelper.respondBadRequest(req, resp);
+        }
+    }
+
+
+    private void handleBrowseRequest(HttpServletRequest req, HttpServletResponse resp, Account account, JsonObject post) throws IOException {
+        if (!account.havePermission(Permissions.DEVICES_CONTROL)) {
+            WebGuiServletHelper.respondForbidden(req, resp);
+            return;
+        }
+        JsonObject datas = RendererItem.getRemoteControlBrowse(post);
+        if (datas != null) {
+            WebGuiServletHelper.respond(req, resp, datas.toString(), 200, "application/json");
+        } else {
+            WebGuiServletHelper.respondBadRequest(req, resp);
+        }
+    }
+
+
+    private void handleRenderersRequest(HttpServletRequest req, HttpServletResponse resp, Account account, JsonObject post) throws IOException {
+        if (!account.havePermission(Permissions.SETTINGS_MODIFY)) {
+            WebGuiServletHelper.respondForbidden(req, resp);
+            return;
+        }
+        if (post != null && post.has("rule")) {
+            String uuid = post.get("rule").getAsString();
+            Boolean isAllowed = post.get("isAllowed").getAsBoolean();
+            if ("DEFAULT".equals(uuid)) {
+                RendererFilter.setBlockedByDefault(!isAllowed);
+            } else {
+                RendererFilter.setAllowed(uuid, isAllowed);
+            }
+        }
+        WebGuiServletHelper.respond(req, resp, "{}", 200, "application/json");
+    }
+
+    private void handleDevicesRequest(HttpServletRequest req, HttpServletResponse resp, Account account, JsonObject post) throws IOException {
+        if (!account.havePermission(Permissions.SETTINGS_MODIFY)) {
+            WebGuiServletHelper.respondForbidden(req, resp);
+            return;
+        }
+        if (post != null && post.has("rule")) {
+            String rule = post.get("rule").getAsString();
+            Boolean isAllowed = post.get("isAllowed").getAsBoolean();
+            if ("DEFAULT".equals(rule)) {
+                NetworkDeviceFilter.setBlockedByDefault(!isAllowed);
+            } else {
+                NetworkDeviceFilter.setAllowed(rule, isAllowed);
+            }
+            WebGuiServletHelper.respond(req, resp, "{}", 200, "application/json");
+        } else {
+            WebGuiServletHelper.respondBadRequest(req, resp);
+        }
+    }
+
+
 
 	private static boolean getRendererIcon(HttpServletRequest req, HttpServletResponse resp, String icon) {
 		if (icon != null) {
