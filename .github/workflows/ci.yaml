@@ -17,6 +17,7 @@ jobs:
       pull-requests: read
     # Set job outputs to values from filter step
     outputs:
+      cifile: ${{ steps.filter.outputs.cifile }}
       javafiles: ${{ steps.filter.outputs.javafiles }}
       webfiles: ${{ steps.filter.outputs.webfiles }}
     steps:
@@ -28,7 +29,7 @@ jobs:
       - name: Get previous commit SHA
         id: prev_commit
         run: echo "PREV_COMMIT_SHA=$(git rev-parse HEAD~1)" >> $GITHUB_ENV
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           base: ${{ env.PREV_COMMIT_SHA }}
@@ -66,7 +67,7 @@ jobs:
           cache: 'maven'
       - name: Cache Node dependencies
         id: cache-node-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             react-client/.yarn
@@ -112,7 +113,7 @@ jobs:
           cache: 'maven'
       - name: Cache Node dependencies
         id: cache-node-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             react-client/.yarn
@@ -132,7 +133,7 @@ jobs:
         needs.changes.outputs.javafiles == 'true' ||
         needs.changes.outputs.cifile == 'true'
       )
-    name: Windows and lint
+    name: Windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -144,15 +145,15 @@ jobs:
           cache: 'maven'
       - name: Cache Node dependencies
         id: cache-node-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             react-client/.yarn
             react-client/node
             react-client/node_modules
           key: node-dependencies-${{ hashFiles('yarn.lock') }}
-      - name: Run linter and tests
-        run: mvn verify -P linter
+      - name: Run tests
+        run: mvn verify -P testing-windows
 
   linux-focal:
     needs: changes
@@ -176,7 +177,7 @@ jobs:
           cache: 'maven'
       - name: Cache Node dependencies
         id: cache-node-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             react-client/.yarn
@@ -214,7 +215,7 @@ jobs:
           cache: 'maven'
       - name: Cache Node dependencies
         id: cache-node-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             react-client/.yarn
@@ -229,3 +230,46 @@ jobs:
           wget --no-check-certificate https://mediaarea.net/download/binary/libmediainfo0/23.10/libmediainfo0v5_23.10-1_amd64.xUbuntu_22.04.deb
           sudo dpkg -i libmediainfo0v5_23.10-1_amd64.xUbuntu_22.04.deb
           mvn verify -P testing -DdisableXmlReport=true
+
+  lint:
+    needs: changes
+    if: |
+      (
+        (github.event_name == 'push' && (github.actor == 'renovate[bot]' || github.ref_name == 'main')) ||
+        (github.event_name == 'pull_request')
+      ) && (
+        needs.changes.outputs.javafiles == 'true' ||
+        needs.changes.outputs.cifile == 'true'
+      )
+    name: Lint
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'liberica'
+          java-version: 17
+          cache: 'maven'
+      - name: Run tests
+        run: |
+          mvn verify -P linter -DdisableXmlReport=true -DskipTests
+
+  changelog:
+    if: |
+      github.actor == 'dependabot[bot]'
+    needs:
+      - macos-browser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dangoslen/dependabot-changelog-helper@v3
+        with:
+          activationLabel: 'dependencies'
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update Changelog"
